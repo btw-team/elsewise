@@ -1,0 +1,73 @@
+{
+  "appName": { "message": "Elsewise" },
+  "appDescription": { "message": "Local browser meeting caption companion" },
+  "unsupportedPage": { "message": "Unsupported page" },
+  "syntheticHarness": { "message": "Synthetic harness" },
+  "captureLabel": { "message": "Capture" },
+  "captionsLabel": { "message": "Captions" },
+  "speakerLabel": { "message": "Speaker" },
+  "bufferLabel": { "message": "Buffer" },
+  "sessionLabel": { "message": "Session" },
+  "lastEventLabel": { "message": "Last event" },
+  "enabled": { "message": "Enabled" },
+  "disabled": { "message": "Disabled" },
+  "notDetected": { "message": "Not detected" },
+  "unknown": { "message": "Unknown" },
+  "none": { "message": "None" },
+  "never": { "message": "Never" },
+  "pending": { "message": "pending" },
+  "dropped": { "message": "dropped" },
+  "bufferNearlyFull": { "message": "The caption buffer is at least 80% full." },
+  "bufferFull": {
+    "message": "The caption buffer is full; new events are being dropped."
+  },
+  "connected": { "message": "connected" },
+  "disconnected": { "message": "disconnected" },
+  "reconnecting": { "message": "reconnecting" },
+  "notPaired": { "message": "not paired" },
+  "unavailable": { "message": "unavailable" },
+  "idle": { "message": "idle" },
+  "running": { "message": "running" },
+  "stopped": { "message": "stopped" },
+  "captionsOffStatus": { "message": "Off" },
+  "captionsOnEmptyStatus": { "message": "Enabled, no speech" },
+  "captionsCapturingStatus": { "message": "Capturing" },
+  "speakerAvailable": { "message": "Available" },
+  "enableCapture": { "message": "Enable capture" },
+  "disableCapture": { "message": "Disable capture" },
+  "hintCaptionsOff": {
+    "message": "Captions are off. Enable them manually inside the meeting."
+  },
+  "hintCaptionsEmpty": {
+    "message": "Captions are enabled; no speech is visible yet."
+  },
+  "hintCapture": {
+    "message": "Capture uses the caption panel you enable inside the meeting."
+  },
+  "hintUnsupported": {
+    "message": "Open Google Meet, Microsoft Teams, or Zoom to begin."
+  },
+  "openSidePanel": { "message": "Open side panel" },
+  "openNewTab": { "message": "Open in new tab" },
+  "pairingToken": { "message": "Pairing token" },
+  "save": { "message": "Save" },
+  "debug": { "message": "Debug" },
+  "dumpCaptionDom": { "message": "Dump caption DOM" },
+  "copyDiagnostics": { "message": "Copy diagnostics" },
+  "sourceSwitchRejected": {
+    "message": "Stop recording before switching source."
+  },
+  "diagnosticRequested": {
+    "message": "A redacted diagnostic download was requested."
+  },
+  "diagnosticsCopied": { "message": "Safe status summary copied." },
+  "currentTabUnavailable": {
+    "message": "Unable to identify the current tab."
+  },
+  "sidePanelUnavailable": { "message": "Unable to open the side panel." },
+  "guiUnavailable": { "message": "Unable to open Elsewise." },
+  "pairingSaved": { "message": "Pairing token saved locally." },
+  "connectingServer": { "message": "Connecting to Elsewise…" },
+  "startServer": { "message": "Start the Elsewise server" },
+  "retry": { "message": "Retry" }
+}

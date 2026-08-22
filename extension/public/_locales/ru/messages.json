@@ -1,0 +1,79 @@
+{
+  "appName": { "message": "Elsewise" },
+  "appDescription": {
+    "message": "Локальный помощник для субтитров браузерных встреч"
+  },
+  "unsupportedPage": { "message": "Неподдерживаемая страница" },
+  "syntheticHarness": { "message": "Синтетический стенд" },
+  "captureLabel": { "message": "Захват" },
+  "captionsLabel": { "message": "Субтитры" },
+  "speakerLabel": { "message": "Спикер" },
+  "bufferLabel": { "message": "Буфер" },
+  "sessionLabel": { "message": "Сессия" },
+  "lastEventLabel": { "message": "Последнее событие" },
+  "enabled": { "message": "Включён" },
+  "disabled": { "message": "Выключен" },
+  "notDetected": { "message": "Не обнаружены" },
+  "unknown": { "message": "Неизвестно" },
+  "none": { "message": "Нет" },
+  "never": { "message": "Никогда" },
+  "pending": { "message": "в очереди" },
+  "dropped": { "message": "потеряно" },
+  "bufferNearlyFull": {
+    "message": "Буфер субтитров заполнен как минимум на 80%."
+  },
+  "bufferFull": {
+    "message": "Буфер субтитров заполнен; новые события отбрасываются."
+  },
+  "connected": { "message": "подключён" },
+  "disconnected": { "message": "нет подключения" },
+  "reconnecting": { "message": "переподключение" },
+  "notPaired": { "message": "не сопряжён" },
+  "unavailable": { "message": "недоступен" },
+  "idle": { "message": "не начата" },
+  "running": { "message": "идёт запись" },
+  "stopped": { "message": "остановлена" },
+  "captionsOffStatus": { "message": "Выключены" },
+  "captionsOnEmptyStatus": { "message": "Включены, речи нет" },
+  "captionsCapturingStatus": { "message": "Захват" },
+  "speakerAvailable": { "message": "Доступно" },
+  "enableCapture": { "message": "Включить захват" },
+  "disableCapture": { "message": "Выключить захват" },
+  "hintCaptionsOff": {
+    "message": "Субтитры выключены. Включите их вручную внутри встречи."
+  },
+  "hintCaptionsEmpty": {
+    "message": "Субтитры включены, но речь пока не отображается."
+  },
+  "hintCapture": {
+    "message": "Захват использует панель субтитров, включённую внутри встречи."
+  },
+  "hintUnsupported": {
+    "message": "Откройте Google Meet, Microsoft Teams или Zoom, чтобы начать."
+  },
+  "openSidePanel": { "message": "Открыть в боковой панели" },
+  "openNewTab": { "message": "Открыть в новой вкладке" },
+  "pairingToken": { "message": "Токен сопряжения" },
+  "save": { "message": "Сохранить" },
+  "debug": { "message": "Отладка" },
+  "dumpCaptionDom": { "message": "Сохранить DOM субтитров" },
+  "copyDiagnostics": { "message": "Копировать диагностику" },
+  "sourceSwitchRejected": {
+    "message": "Остановите запись перед переключением источника."
+  },
+  "diagnosticRequested": {
+    "message": "Запрошена загрузка обезличенной диагностики."
+  },
+  "diagnosticsCopied": { "message": "Безопасная сводка скопирована." },
+  "currentTabUnavailable": {
+    "message": "Не удалось определить текущую вкладку."
+  },
+  "sidePanelUnavailable": {
+    "message": "Не удалось открыть боковую панель."
+  },
+  "guiUnavailable": { "message": "Не удалось открыть Elsewise." },
+  "pairingSaved": { "message": "Токен сопряжения сохранён локально." },
+  "connectingServer": { "message": "Подключение к Elsewise…" },
+  "startServer": { "message": "Запустите сервер Elsewise" },
+  "retry": { "message": "Повторить" }
+}

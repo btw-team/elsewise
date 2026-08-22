@@ -1,0 +1,7 @@
+{
+  "type": "event.ack",
+  "protocol_version": 1,
+  "event_id": "41daf524-c05f-434d-bd22-ddbe940434a1",
+  "client_seq": 184,
+  "result": "applied"
+}

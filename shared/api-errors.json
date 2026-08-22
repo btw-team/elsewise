@@ -1,0 +1,272 @@
+[
+  {
+    "code": "action_limit_reached",
+    "http_status": 409,
+    "translation_key": "actionLimitError",
+    "description": "The global action limit has been reached."
+  },
+  {
+    "code": "action_preset_not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "The selected session action preset does not exist."
+  },
+  {
+    "code": "agent_cwd_missing",
+    "http_status": 409,
+    "translation_key": "cwdError",
+    "description": "The requested agent working directory does not exist."
+  },
+  {
+    "code": "agent_cwd_not_directory",
+    "http_status": 422,
+    "translation_key": "cwdError",
+    "description": "The requested agent working path is not a directory."
+  },
+  {
+    "code": "agent_cwd_unavailable",
+    "http_status": 422,
+    "translation_key": "cwdError",
+    "description": "The requested agent working directory cannot be used."
+  },
+  {
+    "code": "agent_not_started",
+    "http_status": 409,
+    "translation_key": "agentBusyError",
+    "description": "The session has no initialized agent thread."
+  },
+  {
+    "code": "agent_provider_busy",
+    "http_status": 409,
+    "translation_key": "agentBusyError",
+    "description": "The provider has active or queued work."
+  },
+  {
+    "code": "agent_provider_locked",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "The session provider is locked after the first start."
+  },
+  {
+    "code": "agent_queue_draining",
+    "http_status": 409,
+    "translation_key": "agentBusyError",
+    "description": "The agent queue is draining during shutdown."
+  },
+  {
+    "code": "agent_queue_full",
+    "http_status": 429,
+    "translation_key": "queueFullError",
+    "description": "The per-session agent queue is full."
+  },
+  {
+    "code": "agent_reasoning_requires_model",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "Reasoning effort requires an explicit model."
+  },
+  {
+    "code": "agent_run_not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "The requested agent run does not exist."
+  },
+  {
+    "code": "another_session_running",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "A different session is already recording."
+  },
+  {
+    "code": "button_key_exists",
+    "http_status": 409,
+    "translation_key": "actionLimitError",
+    "description": "The generated action key already exists."
+  },
+  {
+    "code": "button_not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "The requested action does not exist."
+  },
+  {
+    "code": "confirmation_mismatch",
+    "http_status": 400,
+    "translation_key": "confirmationError",
+    "description": "A destructive-operation confirmation does not match."
+  },
+  {
+    "code": "default_preset_name_locked",
+    "http_status": 409,
+    "translation_key": "confirmationError",
+    "description": "The Default preset cannot be renamed."
+  },
+  {
+    "code": "default_preset_protected",
+    "http_status": 409,
+    "translation_key": "confirmationError",
+    "description": "The Default preset cannot be deleted."
+  },
+  {
+    "code": "invalid_agent_model",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The selected model is not supported by the provider."
+  },
+  {
+    "code": "invalid_agent_provider",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The selected agent provider is unknown."
+  },
+  {
+    "code": "invalid_agent_reasoning_effort",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The selected effort is not supported by the model."
+  },
+  {
+    "code": "invalid_control_token",
+    "http_status": 403,
+    "translation_key": "invalidRequest",
+    "description": "The private runtime control token is invalid."
+  },
+  {
+    "code": "invalid_cursor",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The pagination cursor is malformed."
+  },
+  {
+    "code": "invalid_initial_prompt",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The initial prompt is blank or invalid."
+  },
+  {
+    "code": "invalid_origin",
+    "http_status": 403,
+    "translation_key": "invalidRequest",
+    "description": "The request violates the loopback origin policy."
+  },
+  {
+    "code": "invalid_session_id",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The session identifier is malformed."
+  },
+  {
+    "code": "not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "The requested API route or resource does not exist."
+  },
+  {
+    "code": "preset_action_duplicate",
+    "http_status": 409,
+    "translation_key": "actionLimitError",
+    "description": "An action appears more than once in a preset."
+  },
+  {
+    "code": "preset_action_limit_reached",
+    "http_status": 409,
+    "translation_key": "actionLimitError",
+    "description": "The preset action limit has been reached."
+  },
+  {
+    "code": "preset_action_not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "A referenced preset action does not exist."
+  },
+  {
+    "code": "preset_limit_reached",
+    "http_status": 409,
+    "translation_key": "actionLimitError",
+    "description": "The global preset limit has been reached."
+  },
+  {
+    "code": "preset_name_empty",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The preset name is blank."
+  },
+  {
+    "code": "preset_name_exists",
+    "http_status": 409,
+    "translation_key": "actionLimitError",
+    "description": "A preset with this name already exists."
+  },
+  {
+    "code": "preset_not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "The requested preset does not exist."
+  },
+  {
+    "code": "prompt_empty",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The free prompt is blank."
+  },
+  {
+    "code": "request_failed",
+    "http_status": 500,
+    "translation_key": "requestFailed",
+    "description": "An HTTP failure has no more specific stable code."
+  },
+  {
+    "code": "request_validation_error",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "Request path, query, or body validation failed."
+  },
+  {
+    "code": "segment_missing",
+    "http_status": 500,
+    "translation_key": "requestFailed",
+    "description": "A running session has no active capture segment."
+  },
+  {
+    "code": "session_already_started",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "First-start-only session fields are locked."
+  },
+  {
+    "code": "session_not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "The requested session does not exist."
+  },
+  {
+    "code": "session_not_running",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "The operation requires a running session."
+  },
+  {
+    "code": "session_running",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "The operation requires a stopped session."
+  },
+  {
+    "code": "shutdown_unavailable",
+    "http_status": 503,
+    "translation_key": "requestFailed",
+    "description": "The server runtime cannot currently accept shutdown."
+  },
+  {
+    "code": "ui_event_cursor_pruned",
+    "http_status": 409,
+    "translation_key": "cursorExpiredError",
+    "description": "The requested UI event cursor predates retained history."
+  },
+  {
+    "code": "unsafe_export_path",
+    "http_status": 500,
+    "translation_key": "requestFailed",
+    "description": "The resolved export path escaped its permitted root."
+  }
+]

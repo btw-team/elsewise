@@ -1,0 +1,77 @@
+{
+  "appName": { "message": "Elsewise" },
+  "appDescription": {
+    "message": "Asistente local para subtítulos de reuniones del navegador"
+  },
+  "unsupportedPage": { "message": "Página no compatible" },
+  "syntheticHarness": { "message": "Entorno de prueba" },
+  "captureLabel": { "message": "Captura" },
+  "captionsLabel": { "message": "Subtítulos" },
+  "speakerLabel": { "message": "Hablante" },
+  "bufferLabel": { "message": "Búfer" },
+  "sessionLabel": { "message": "Sesión" },
+  "lastEventLabel": { "message": "Último evento" },
+  "enabled": { "message": "Activado" },
+  "disabled": { "message": "Desactivado" },
+  "notDetected": { "message": "No detectado" },
+  "unknown": { "message": "Desconocido" },
+  "none": { "message": "Ninguno" },
+  "never": { "message": "Nunca" },
+  "pending": { "message": "pendiente" },
+  "dropped": { "message": "descartado" },
+  "bufferNearlyFull": {
+    "message": "El búfer de subtítulos está lleno al menos al 80 %."
+  },
+  "bufferFull": {
+    "message": "El búfer de subtítulos está lleno; se descartan los eventos nuevos."
+  },
+  "connected": { "message": "conectado" },
+  "disconnected": { "message": "desconectado" },
+  "reconnecting": { "message": "reconectando" },
+  "notPaired": { "message": "sin vincular" },
+  "unavailable": { "message": "no disponible" },
+  "idle": { "message": "inactivo" },
+  "running": { "message": "en ejecución" },
+  "stopped": { "message": "detenido" },
+  "captionsOffStatus": { "message": "Desactivados" },
+  "captionsOnEmptyStatus": { "message": "Activados, sin voz" },
+  "captionsCapturingStatus": { "message": "Capturando" },
+  "speakerAvailable": { "message": "Disponible" },
+  "enableCapture": { "message": "Activar captura" },
+  "disableCapture": { "message": "Desactivar captura" },
+  "hintCaptionsOff": {
+    "message": "Los subtítulos están desactivados. Actívalos manualmente en la reunión."
+  },
+  "hintCaptionsEmpty": {
+    "message": "Los subtítulos están activados; aún no hay voz visible."
+  },
+  "hintCapture": {
+    "message": "La captura usa el panel de subtítulos que activas en la reunión."
+  },
+  "hintUnsupported": {
+    "message": "Abre Google Meet, Microsoft Teams o Zoom para comenzar."
+  },
+  "openSidePanel": { "message": "Abrir panel lateral" },
+  "openNewTab": { "message": "Abrir en una pestaña nueva" },
+  "pairingToken": { "message": "Token de vinculación" },
+  "save": { "message": "Guardar" },
+  "debug": { "message": "Depuración" },
+  "dumpCaptionDom": { "message": "Volcar DOM de subtítulos" },
+  "copyDiagnostics": { "message": "Copiar diagnóstico" },
+  "sourceSwitchRejected": {
+    "message": "Detén la grabación antes de cambiar de fuente."
+  },
+  "diagnosticRequested": {
+    "message": "Se solicitó una descarga de diagnóstico redactada."
+  },
+  "diagnosticsCopied": { "message": "Resumen seguro copiado." },
+  "currentTabUnavailable": {
+    "message": "No se pudo identificar la pestaña actual."
+  },
+  "sidePanelUnavailable": { "message": "No se pudo abrir el panel lateral." },
+  "guiUnavailable": { "message": "No se pudo abrir Elsewise." },
+  "pairingSaved": { "message": "Token de vinculación guardado localmente." },
+  "connectingServer": { "message": "Conectando con Elsewise…" },
+  "startServer": { "message": "Inicia el servidor Elsewise" },
+  "retry": { "message": "Reintentar" }
+}

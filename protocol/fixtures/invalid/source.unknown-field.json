@@ -1,0 +1,12 @@
+{
+  "type": "source.status",
+  "protocol_version": 1,
+  "event_id": "0f1dbe45-d94d-4c6c-9bdd-c70d2a9f0b2e",
+  "source_id": "document-7",
+  "client_seq": 183,
+  "platform": "google_meet",
+  "enabled": true,
+  "captions_status": "on_empty",
+  "observed_at": "2026-08-12T13:20:14.123Z",
+  "url": "https://meet.google.com/secret?authuser=0"
+}

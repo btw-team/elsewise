@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a reproducible Elsewise defect without sensitive meeting data
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include transcripts, participant names, tokens, credentials, or unsanitized DOM captures.
+  - type: input
+    id: version
+    attributes:
+      label: Elsewise version
+      placeholder: 0.1.2 or commit SHA
+    validations:
+      required: true
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        [
+          Launcher,
+          Server,
+          Web GUI,
+          Chrome extension,
+          Firefox extension,
+          Packaging,
+          Documentation,
+        ]
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS/version, architecture, browser/version, meeting platform, source or packaged artifact.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and redacted evidence
+    validations:
+      required: true
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I removed credentials, tokens, transcripts, participant data, and sensitive URLs.
+          required: true

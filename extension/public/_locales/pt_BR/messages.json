@@ -1,0 +1,79 @@
+{
+  "appName": { "message": "Elsewise" },
+  "appDescription": {
+    "message": "Assistente local para legendas de reuniões no navegador"
+  },
+  "unsupportedPage": { "message": "Página não compatível" },
+  "syntheticHarness": { "message": "Ambiente de teste" },
+  "captureLabel": { "message": "Captura" },
+  "captionsLabel": { "message": "Legendas" },
+  "speakerLabel": { "message": "Falante" },
+  "bufferLabel": { "message": "Buffer" },
+  "sessionLabel": { "message": "Sessão" },
+  "lastEventLabel": { "message": "Último evento" },
+  "enabled": { "message": "Ativado" },
+  "disabled": { "message": "Desativado" },
+  "notDetected": { "message": "Não detectado" },
+  "unknown": { "message": "Desconhecido" },
+  "none": { "message": "Nenhum" },
+  "never": { "message": "Nunca" },
+  "pending": { "message": "pendente" },
+  "dropped": { "message": "descartado" },
+  "bufferNearlyFull": {
+    "message": "O buffer de legendas está pelo menos 80% cheio."
+  },
+  "bufferFull": {
+    "message": "O buffer de legendas está cheio; novos eventos estão sendo descartados."
+  },
+  "connected": { "message": "conectado" },
+  "disconnected": { "message": "desconectado" },
+  "reconnecting": { "message": "reconectando" },
+  "notPaired": { "message": "não pareado" },
+  "unavailable": { "message": "indisponível" },
+  "idle": { "message": "inativo" },
+  "running": { "message": "em execução" },
+  "stopped": { "message": "parado" },
+  "captionsOffStatus": { "message": "Desativadas" },
+  "captionsOnEmptyStatus": { "message": "Ativadas, sem fala" },
+  "captionsCapturingStatus": { "message": "Capturando" },
+  "speakerAvailable": { "message": "Disponível" },
+  "enableCapture": { "message": "Ativar captura" },
+  "disableCapture": { "message": "Desativar captura" },
+  "hintCaptionsOff": {
+    "message": "As legendas estão desativadas. Ative-as manualmente na reunião."
+  },
+  "hintCaptionsEmpty": {
+    "message": "As legendas estão ativadas; ainda não há fala visível."
+  },
+  "hintCapture": {
+    "message": "A captura usa o painel de legendas que você ativa na reunião."
+  },
+  "hintUnsupported": {
+    "message": "Abra Google Meet, Microsoft Teams ou Zoom para começar."
+  },
+  "openSidePanel": { "message": "Abrir painel lateral" },
+  "openNewTab": { "message": "Abrir em nova aba" },
+  "pairingToken": { "message": "Token de pareamento" },
+  "save": { "message": "Salvar" },
+  "debug": { "message": "Depuração" },
+  "dumpCaptionDom": { "message": "Salvar DOM das legendas" },
+  "copyDiagnostics": { "message": "Copiar diagnóstico" },
+  "sourceSwitchRejected": {
+    "message": "Pare a gravação antes de trocar a fonte."
+  },
+  "diagnosticRequested": {
+    "message": "Um download de diagnóstico anonimizado foi solicitado."
+  },
+  "diagnosticsCopied": { "message": "Resumo seguro copiado." },
+  "currentTabUnavailable": {
+    "message": "Não foi possível identificar a aba atual."
+  },
+  "sidePanelUnavailable": {
+    "message": "Não foi possível abrir o painel lateral."
+  },
+  "guiUnavailable": { "message": "Não foi possível abrir o Elsewise." },
+  "pairingSaved": { "message": "Token de pareamento salvo localmente." },
+  "connectingServer": { "message": "Conectando ao Elsewise…" },
+  "startServer": { "message": "Inicie o servidor Elsewise" },
+  "retry": { "message": "Tentar novamente" }
+}

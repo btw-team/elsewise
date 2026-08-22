@@ -1,0 +1,9 @@
+{
+  "project": "https://github.com/btw-team/elsewise",
+  "releases": "https://github.com/btw-team/elsewise/releases/latest",
+  "documentation": "https://github.com/btw-team/elsewise/tree/main/docs",
+  "chrome_store": "https://chromewebstore.google.com/",
+  "firefox_store": "https://addons.mozilla.org/firefox/",
+  "support": "https://ko-fi.com/tychh",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0"
+}

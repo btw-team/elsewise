@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elsewise</title>
+  </head>
+  <body>
+    <main id="server-status" class="server-status">
+      <p id="server-message" data-i18n="connectingServer">
+        Connecting to Elsewise…
+      </p>
+      <button id="retry" type="button" data-i18n="retry" hidden>Retry</button>
+    </main>
+    <iframe id="gui" title="Elsewise" hidden></iframe>
+    <script type="module" src="/src/sidepanel/index.ts"></script>
+  </body>
+</html>
