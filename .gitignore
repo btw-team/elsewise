@@ -1,0 +1,41 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# JavaScript
+node_modules/
+dist/
+build/
+packaging/generated/
+coverage/
+*.tsbuildinfo
+
+# Runtime data (canonical data belongs under platformdirs, never in the repo)
+*.sqlite3
+*.sqlite3-*
+/exports/
+/diagnostics/
+/runtime/
+
+# Local browser captures may contain meeting names, captions, and DOM metadata.
+output/playwright/
+.playwright-cli/
+
+# Editors and OS
+.DS_Store
+.idea/
+.vscode/
+
+# Local project notes
+notes/
+!notes/
+notes/*
+!notes/unsolved.md
+!notes/ideas.md
