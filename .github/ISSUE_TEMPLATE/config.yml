@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Elsewise documentation
+    url: https://github.com/btw-team/elsewise/tree/main/docs
+    about: Read the installation, usage, and troubleshooting documentation.
+  - name: Report a security vulnerability
+    url: https://github.com/btw-team/elsewise/security/advisories/new
+    about: Report vulnerabilities privately. Do not open a public issue.
