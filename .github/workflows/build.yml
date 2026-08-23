@@ -28,17 +28,17 @@ jobs:
         run: |
           echo "Manual artifact builds must run from main." >&2
           exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -64,19 +64,19 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 50
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.24"
           cache: false
@@ -105,7 +105,7 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: "1"
       - name: Archive portable onedir
         run: tar -C dist/frozen -czf "dist/packages/Elsewise-${{ needs.validate.outputs.version }}-linux-x86_64.tar.gz" Elsewise
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: platform-linux
           path: dist/packages/*
@@ -117,15 +117,15 @@ jobs:
     runs-on: windows-2022
     timeout-minutes: 55
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -140,7 +140,7 @@ jobs:
       - name: Smoke-test installer and PATH cleanup
         shell: pwsh
         run: ./scripts/smoke-windows-installer.ps1 -InstallerPath "dist/packages/Elsewise-${{ needs.validate.outputs.version }}-windows-x64-setup.exe"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: platform-windows
           path: dist/packages/*
@@ -160,15 +160,15 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 55
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v7
         with:
           version: ${{ env.UV_VERSION }}
           enable-cache: true
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
@@ -177,7 +177,7 @@ jobs:
       - run: uv sync --all-groups --frozen
       - run: uv run python scripts/build-frozen.py
       - run: scripts/build-macos-dmg.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.artifact }}
           path: dist/packages/*
@@ -188,15 +188,15 @@ jobs:
     needs: [validate, linux, windows, macos]
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v7
         with:
           pattern: platform-*
           path: release-assets
           merge-multiple: true
       - name: Verify inventory and generate checksums
         run: python scripts/verify-release-assets.py release-assets --version "${{ needs.validate.outputs.version }}" --write-checksums
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: release-bundle
           path: release-assets/*
