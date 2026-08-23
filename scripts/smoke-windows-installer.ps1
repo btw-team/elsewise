@@ -8,6 +8,7 @@ $InstallerPath = (Resolve-Path $InstallerPath).Path
 $InstallDir = Join-Path $env:LOCALAPPDATA "Programs\Elsewise"
 $Uninstaller = Join-Path $InstallDir "unins000.exe"
 $Cli = Join-Path $InstallDir "elsewise.exe"
+$Gui = Join-Path $InstallDir "elsewise-gui.exe"
 $CliPath = Join-Path $InstallDir "bin"
 
 function Invoke-CheckedProcess {
@@ -31,6 +32,7 @@ Invoke-CheckedProcess `
     -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS=addtopath") `
     -Description "Installer"
 if (-not (Test-Path $Cli)) { throw "Installed CLI is missing: $Cli" }
+if (-not (Test-Path $Gui)) { throw "Installed GUI is missing: $Gui" }
 if (-not (Test-Path $Uninstaller)) { throw "Uninstaller is missing: $Uninstaller" }
 
 & $Cli --version

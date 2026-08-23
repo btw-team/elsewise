@@ -93,8 +93,7 @@ def executable(source, name, *, console):
     )
 
 
-gui_name = "Elsewise" if sys.platform in {"darwin", "win32"} else "elsewise-gui"
-gui_exe = executable(gui_analysis, gui_name, console=False)
+gui_exe = executable(gui_analysis, "elsewise-gui", console=False)
 cli_exe = executable(cli_analysis, "elsewise", console=True)
 server_exe = executable(server_analysis, "elsewise-server", console=False)
 
