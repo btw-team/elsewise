@@ -1,0 +1,24 @@
+{
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "{d410f9f2-4892-5d4a-b92e-f5c25db456e8}",
+      "strict_min_version": "140.0",
+      "data_collection_permissions": {
+        "required": [
+          "authenticationInfo",
+          "personalCommunications",
+          "personallyIdentifyingInfo"
+        ]
+      }
+    }
+  },
+  "background": {
+    "scripts": ["background.js"],
+    "type": "module"
+  },
+  "sidebar_action": {
+    "default_title": "__MSG_appName__",
+    "default_panel": "sidepanel.html",
+    "open_at_install": false
+  }
+}

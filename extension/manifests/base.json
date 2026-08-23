@@ -1,0 +1,62 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_appName__",
+  "description": "__MSG_appDescription__",
+  "default_locale": "en",
+  "icons": {
+    "16": "icons/elsewise-16.png",
+    "32": "icons/elsewise-32.png",
+    "48": "icons/elsewise-48.png",
+    "128": "icons/elsewise-128.png"
+  },
+  "permissions": ["activeTab", "downloads", "storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "https://meet.google.com/*",
+    "https://teams.microsoft.com/*",
+    "https://*.teams.microsoft.com/*",
+    "https://teams.live.com/*",
+    "https://app.zoom.us/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; frame-src http://127.0.0.1:38473"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*", "http://127.0.0.1/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://teams.microsoft.com/*",
+        "https://*.teams.microsoft.com/*",
+        "https://teams.live.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://app.zoom.us/*"],
+      "js": ["zoom-main.js"],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://app.zoom.us/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle",
+      "all_frames": true
+    }
+  ],
+  "action": {
+    "default_title": "__MSG_appName__",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/elsewise-16.png",
+      "32": "icons/elsewise-32.png"
+    }
+  }
+}

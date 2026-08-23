@@ -1,0 +1,13 @@
+{
+  "type": "utterance.upsert",
+  "protocol_version": 1,
+  "event_id": "41daf524-c05f-434d-bd22-ddbe940434a1",
+  "source_id": "document-7",
+  "client_seq": 184,
+  "platform": "google_meet",
+  "meeting_key": "fixture-meeting",
+  "utterance_id": "caption-12",
+  "revision": 1,
+  "text": "",
+  "observed_at": "2026-08-12T13:20:15.123Z"
+}

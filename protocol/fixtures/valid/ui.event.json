@@ -1,0 +1,9 @@
+{
+  "type": "ui.event",
+  "protocol_version": 1,
+  "event_id": 42,
+  "event_type": "utterance.updated",
+  "aggregate_id": "caption-12",
+  "created_at": "2026-08-12T13:20:15.456Z",
+  "payload": { "revision": 3, "final": false }
+}

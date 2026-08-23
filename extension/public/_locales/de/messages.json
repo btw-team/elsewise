@@ -1,0 +1,82 @@
+{
+  "appName": { "message": "Elsewise" },
+  "theme": { "message": "Design" },
+  "darkTheme": { "message": "Dunkel" },
+  "lightTheme": { "message": "Hell" },
+  "appDescription": {
+    "message": "Lokaler Begleiter für Browser-Meeting-Untertitel"
+  },
+  "unsupportedPage": { "message": "Nicht unterstützte Seite" },
+  "syntheticHarness": { "message": "Testumgebung" },
+  "captureLabel": { "message": "Erfassung" },
+  "captionsLabel": { "message": "Untertitel" },
+  "speakerLabel": { "message": "Sprecher" },
+  "bufferLabel": { "message": "Puffer" },
+  "sessionLabel": { "message": "Sitzung" },
+  "lastEventLabel": { "message": "Letztes Ereignis" },
+  "enabled": { "message": "Aktiviert" },
+  "disabled": { "message": "Deaktiviert" },
+  "notDetected": { "message": "Nicht erkannt" },
+  "unknown": { "message": "Unbekannt" },
+  "none": { "message": "Keine" },
+  "never": { "message": "Nie" },
+  "pending": { "message": "ausstehend" },
+  "dropped": { "message": "verworfen" },
+  "bufferNearlyFull": {
+    "message": "Der Untertitelpuffer ist zu mindestens 80 % gefüllt."
+  },
+  "bufferFull": {
+    "message": "Der Untertitelpuffer ist voll; neue Ereignisse werden verworfen."
+  },
+  "connected": { "message": "verbunden" },
+  "disconnected": { "message": "getrennt" },
+  "reconnecting": { "message": "Verbindung wird wiederhergestellt" },
+  "notPaired": { "message": "nicht gekoppelt" },
+  "unavailable": { "message": "nicht verfügbar" },
+  "idle": { "message": "inaktiv" },
+  "running": { "message": "läuft" },
+  "stopped": { "message": "gestoppt" },
+  "captionsOffStatus": { "message": "Aus" },
+  "captionsOnEmptyStatus": { "message": "Aktiv, keine Sprache" },
+  "captionsCapturingStatus": { "message": "Erfassung läuft" },
+  "speakerAvailable": { "message": "Verfügbar" },
+  "enableCapture": { "message": "Erfassung aktivieren" },
+  "disableCapture": { "message": "Erfassung deaktivieren" },
+  "hintCaptionsOff": {
+    "message": "Untertitel sind ausgeschaltet. Aktiviere sie manuell im Meeting."
+  },
+  "hintCaptionsEmpty": {
+    "message": "Untertitel sind aktiviert; noch ist keine Sprache sichtbar."
+  },
+  "hintCapture": {
+    "message": "Die Erfassung nutzt das Untertitelpanel, das du im Meeting aktivierst."
+  },
+  "hintUnsupported": {
+    "message": "Öffne Google Meet, Microsoft Teams oder Zoom, um zu beginnen."
+  },
+  "openSidePanel": { "message": "Seitenleiste öffnen" },
+  "openNewTab": { "message": "In neuem Tab öffnen" },
+  "pairingToken": { "message": "Kopplungstoken" },
+  "save": { "message": "Speichern" },
+  "debug": { "message": "Debug" },
+  "dumpCaptionDom": { "message": "Untertitel-DOM speichern" },
+  "copyDiagnostics": { "message": "Diagnose kopieren" },
+  "sourceSwitchRejected": {
+    "message": "Stoppe die Aufnahme, bevor du die Quelle wechselst."
+  },
+  "diagnosticRequested": {
+    "message": "Ein bereinigter Diagnose-Download wurde angefordert."
+  },
+  "diagnosticsCopied": { "message": "Sichere Statusübersicht kopiert." },
+  "currentTabUnavailable": {
+    "message": "Der aktuelle Tab konnte nicht erkannt werden."
+  },
+  "sidePanelUnavailable": {
+    "message": "Die Seitenleiste konnte nicht geöffnet werden."
+  },
+  "guiUnavailable": { "message": "Elsewise konnte nicht geöffnet werden." },
+  "pairingSaved": { "message": "Kopplungstoken lokal gespeichert." },
+  "connectingServer": { "message": "Verbindung mit Elsewise…" },
+  "startServer": { "message": "Starte den Elsewise-Server" },
+  "retry": { "message": "Erneut versuchen" }
+}

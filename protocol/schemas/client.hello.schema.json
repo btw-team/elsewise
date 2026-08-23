@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsewise.local/protocol/v1/client.hello.schema.json",
+  "title": "Client hello",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "protocol_version",
+    "role",
+    "token",
+    "installation_id",
+    "extension_version"
+  ],
+  "properties": {
+    "type": { "const": "client.hello" },
+    "protocol_version": { "const": 1 },
+    "role": { "const": "extension" },
+    "token": { "type": "string", "minLength": 16, "maxLength": 4096 },
+    "installation_id": { "type": "string", "format": "uuid" },
+    "extension_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
+    }
+  }
+}

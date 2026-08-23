@@ -1,0 +1,8 @@
+{
+  "type": "ui.event",
+  "protocol_version": 1,
+  "event_id": 42,
+  "event_type": "utterance.updated",
+  "created_at": "2026-08-12T13:20:15.456Z",
+  "payload": "not-an-object"
+}

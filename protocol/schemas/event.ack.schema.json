@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsewise.local/protocol/v1/event.ack.schema.json",
+  "title": "Event acknowledgement",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["type", "protocol_version", "event_id", "client_seq", "result"],
+  "properties": {
+    "type": { "const": "event.ack" },
+    "protocol_version": { "const": 1 },
+    "event_id": { "type": "string", "format": "uuid" },
+    "client_seq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "result": {
+      "enum": [
+        "applied",
+        "duplicate",
+        "stale",
+        "no_active_session",
+        "source_not_bound",
+        "grace_finalize_applied",
+        "rejected"
+      ]
+    },
+    "reason": { "type": "string", "maxLength": 1024 }
+  }
+}

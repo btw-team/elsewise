@@ -1,0 +1,16 @@
+{
+  "type": "source.status",
+  "protocol_version": 1,
+  "event_id": "0f1dbe45-d94d-4c6c-9bdd-c70d2a9f0b2e",
+  "source_id": "document-7",
+  "tab_id": 7,
+  "document_id": "document-7",
+  "client_seq": 183,
+  "platform": "google_meet",
+  "enabled": true,
+  "captions_status": "on_empty",
+  "speaker_detection": "available",
+  "meeting_key": "fixture-meeting",
+  "meeting_title": "Planning",
+  "observed_at": "2026-08-12T13:20:14.123Z"
+}

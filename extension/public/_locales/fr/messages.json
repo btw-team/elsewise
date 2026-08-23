@@ -1,0 +1,84 @@
+{
+  "appName": { "message": "Elsewise" },
+  "theme": { "message": "Thème" },
+  "darkTheme": { "message": "Sombre" },
+  "lightTheme": { "message": "Clair" },
+  "appDescription": {
+    "message": "Assistant local pour les sous-titres des réunions dans le navigateur"
+  },
+  "unsupportedPage": { "message": "Page non prise en charge" },
+  "syntheticHarness": { "message": "Environnement synthétique" },
+  "captureLabel": { "message": "Capture" },
+  "captionsLabel": { "message": "Sous-titres" },
+  "speakerLabel": { "message": "Intervenant" },
+  "bufferLabel": { "message": "Tampon" },
+  "sessionLabel": { "message": "Session" },
+  "lastEventLabel": { "message": "Dernier événement" },
+  "enabled": { "message": "Activée" },
+  "disabled": { "message": "Désactivée" },
+  "notDetected": { "message": "Non détectés" },
+  "unknown": { "message": "Inconnu" },
+  "none": { "message": "Aucune" },
+  "never": { "message": "Jamais" },
+  "pending": { "message": "en attente" },
+  "dropped": { "message": "perdus" },
+  "bufferNearlyFull": {
+    "message": "Le tampon de sous-titres est rempli à au moins 80 %."
+  },
+  "bufferFull": {
+    "message": "Le tampon de sous-titres est plein ; les nouveaux événements sont ignorés."
+  },
+  "connected": { "message": "connecté" },
+  "disconnected": { "message": "déconnecté" },
+  "reconnecting": { "message": "reconnexion" },
+  "notPaired": { "message": "non associé" },
+  "unavailable": { "message": "indisponible" },
+  "idle": { "message": "non démarrée" },
+  "running": { "message": "en cours" },
+  "stopped": { "message": "arrêtée" },
+  "captionsOffStatus": { "message": "Désactivés" },
+  "captionsOnEmptyStatus": { "message": "Activés, aucune parole" },
+  "captionsCapturingStatus": { "message": "Capture en cours" },
+  "speakerAvailable": { "message": "Disponible" },
+  "enableCapture": { "message": "Activer la capture" },
+  "disableCapture": { "message": "Désactiver la capture" },
+  "hintCaptionsOff": {
+    "message": "Les sous-titres sont désactivés. Activez-les manuellement dans la réunion."
+  },
+  "hintCaptionsEmpty": {
+    "message": "Les sous-titres sont activés, mais aucune parole n’est encore visible."
+  },
+  "hintCapture": {
+    "message": "La capture utilise le panneau de sous-titres activé dans la réunion."
+  },
+  "hintUnsupported": {
+    "message": "Ouvrez Google Meet, Microsoft Teams ou Zoom pour commencer."
+  },
+  "openSidePanel": { "message": "Ouvrir dans le panneau latéral" },
+  "openNewTab": { "message": "Ouvrir dans un nouvel onglet" },
+  "pairingToken": { "message": "Jeton d’association" },
+  "save": { "message": "Enregistrer" },
+  "debug": { "message": "Débogage" },
+  "dumpCaptionDom": { "message": "Exporter le DOM des sous-titres" },
+  "copyDiagnostics": { "message": "Copier le diagnostic" },
+  "sourceSwitchRejected": {
+    "message": "Arrêtez l’enregistrement avant de changer de source."
+  },
+  "diagnosticRequested": {
+    "message": "Le téléchargement d’un diagnostic anonymisé a été demandé."
+  },
+  "diagnosticsCopied": { "message": "Le résumé sécurisé a été copié." },
+  "currentTabUnavailable": {
+    "message": "Impossible d’identifier l’onglet actuel."
+  },
+  "sidePanelUnavailable": {
+    "message": "Impossible d’ouvrir le panneau latéral."
+  },
+  "guiUnavailable": { "message": "Impossible d’ouvrir Elsewise." },
+  "pairingSaved": {
+    "message": "Le jeton d’association a été enregistré localement."
+  },
+  "connectingServer": { "message": "Connexion à Elsewise…" },
+  "startServer": { "message": "Démarrez le serveur Elsewise" },
+  "retry": { "message": "Réessayer" }
+}

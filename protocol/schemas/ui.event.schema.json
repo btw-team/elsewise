@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsewise.local/protocol/v1/ui.event.schema.json",
+  "title": "UI outbox event",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "protocol_version",
+    "event_id",
+    "event_type",
+    "created_at",
+    "payload"
+  ],
+  "properties": {
+    "type": { "const": "ui.event" },
+    "protocol_version": { "const": 1 },
+    "event_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "event_type": {
+      "enum": [
+        "session.state",
+        "source.status",
+        "utterance.created",
+        "utterance.updated",
+        "utterance.finalized",
+        "agent.queued",
+        "agent.started",
+        "agent.delta",
+        "agent.completed",
+        "agent.failed",
+        "agent.cancelled",
+        "settings.changed",
+        "export.completed",
+        "export.failed",
+        "resync_required"
+      ]
+    },
+    "aggregate_id": { "type": ["string", "null"], "maxLength": 256 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "payload": { "type": "object", "maxProperties": 64 }
+  }
+}

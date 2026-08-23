@@ -1,0 +1,340 @@
+:root {
+  --color-canvas: #1b2229;
+  --color-surface: #26313b;
+  --color-surface-raised: #2d3944;
+  --color-border: #3b4b57;
+  --color-border-strong: #546773;
+  --color-text: #edf5f7;
+  --color-text-soft: #cad7dc;
+  --color-text-muted: #9babb3;
+  --color-text-faint: #7f919a;
+  --color-accent: #03b8e9;
+  --color-accent-strong: #17d3cf;
+  --color-primary: #03b8e9;
+  --color-primary-fill: #0a708a;
+  --color-primary-hover: #0d8fab;
+  --color-on-accent: #071c22;
+  --color-success: #70d89d;
+  --color-success-deep: #203c31;
+  --color-warning: #f2bd63;
+  --color-warning-deep: #49391d;
+  --color-danger: #ff7d8b;
+  --color-danger-deep: #48272c;
+  --color-focus-ring: #36d1ef;
+  color: var(--color-text);
+  background: var(--color-canvas);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 400px;
+}
+
+.popup {
+  padding: 18px;
+  background: var(--color-canvas);
+}
+
+header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 16px;
+  row-gap: 17px;
+  align-items: flex-start;
+}
+
+.header-controls {
+  align-self: start;
+  margin-top: -1px;
+}
+
+.theme-control {
+  display: grid;
+  padding: 1px;
+  grid-template-columns: repeat(2, 1fr);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+.theme-control button {
+  min-height: 20px;
+  padding: 1px 7px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  background: transparent;
+  font-size: 10px;
+  line-height: 1;
+}
+.theme-control button.selected {
+  color: var(--color-on-accent);
+  background: linear-gradient(
+    135deg,
+    var(--color-accent),
+    var(--color-accent-strong)
+  );
+  font-weight: 700;
+}
+
+.popup-wordmark {
+  position: relative;
+  display: block;
+  width: 100px;
+  align-self: end;
+  aspect-ratio: 120.71 / 18.963;
+}
+
+.brand-logo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: left center;
+}
+
+.brand-logo-light {
+  display: none;
+}
+
+:root[data-theme="light"] .brand-logo-dark {
+  display: none;
+}
+
+:root[data-theme="light"] .brand-logo-light {
+  display: block;
+}
+
+.provider-row {
+  display: flex;
+  min-width: 0;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px;
+}
+
+h1 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text-soft);
+  font-size: 25px;
+  font-weight: 600;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-top: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  color: var(--color-text-muted);
+  font-size: 10px;
+}
+
+.badge.connected {
+  border-color: var(--color-success);
+  color: var(--color-success);
+  background: var(--color-success-deep);
+}
+
+.badge.not-paired,
+.badge.unavailable {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: var(--color-danger-deep);
+}
+
+.badge.reconnecting {
+  border-color: var(--color-warning);
+  color: var(--color-warning);
+  background: var(--color-warning-deep);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  margin: 21px 0 18px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-border);
+}
+
+.status-grid div {
+  min-width: 0;
+  padding: 10px 12px;
+  background: var(--color-surface);
+}
+
+dt {
+  color: var(--color-text-faint);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+dd {
+  margin: 3px 0 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+dd.warning,
+.buffer-warning {
+  color: var(--color-warning);
+}
+
+.buffer-warning {
+  min-height: 0;
+  margin: -10px 0 10px;
+  font-size: 11px;
+}
+
+.buffer-warning:empty {
+  display: none;
+}
+
+.hint,
+.notice {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+button,
+input {
+  min-height: 36px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: 8px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+}
+
+button {
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+button.primary {
+  grid-column: 1 / -1;
+  border-color: var(--color-primary);
+  color: var(--color-on-accent);
+  background: linear-gradient(
+    135deg,
+    var(--color-accent),
+    var(--color-accent-strong)
+  );
+  font-weight: 700;
+}
+
+button.gui-action {
+  border-color: var(--color-accent);
+  background: var(--color-surface-raised);
+}
+
+button:hover:not(:disabled),
+input:focus {
+  border-color: var(--color-accent);
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+button.primary:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  filter: brightness(1.06);
+}
+
+.pairing {
+  margin-top: 16px;
+}
+
+.pairing label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+}
+
+.pairing div {
+  display: flex;
+  gap: 7px;
+}
+
+.pairing input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 9px;
+}
+
+.notice {
+  min-height: 18px;
+  margin-bottom: 0;
+  color: var(--color-warning);
+}
+
+.debug-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.debug-title {
+  margin: 0 0 8px;
+  color: var(--color-text-faint);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.debug-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

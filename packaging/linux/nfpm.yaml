@@ -1,0 +1,46 @@
+name: elsewise
+arch: ${NFPM_ARCH}
+platform: linux
+version: ${ELSEWISE_VERSION}
+section: utils
+priority: optional
+maintainer: BTW Team
+description: Local companion for browser meeting captions and AI-assisted workflows
+vendor: BTW Team
+homepage: ${PROJECT_URL}
+license: Apache-2.0
+contents:
+  - src: dist/frozen/Elsewise/
+    dst: /opt/elsewise/
+    type: tree
+  - src: packaging/linux/elsewise.desktop
+    dst: /usr/share/applications/elsewise.desktop
+  - src: packaging/generated/elsewise.png
+    dst: /usr/share/icons/hicolor/256x256/apps/elsewise.png
+  - src: LICENSE
+    dst: /usr/share/doc/elsewise/LICENSE
+  - src: NOTICE
+    dst: /usr/share/doc/elsewise/NOTICE
+  - src: THIRD_PARTY_NOTICES.md
+    dst: /usr/share/doc/elsewise/THIRD_PARTY_NOTICES.md
+  - src: /opt/elsewise/elsewise
+    dst: /usr/bin/elsewise
+    type: symlink
+  - src: /opt/elsewise/elsewise-gui
+    dst: /usr/bin/elsewise-gui
+    type: symlink
+overrides:
+  deb:
+    depends:
+      - libx11-6
+      - libxext6
+      - libxrender1
+      - libxft2
+      - libfontconfig1
+  rpm:
+    depends:
+      - libX11
+      - libXext
+      - libXrender
+      - libXft
+      - fontconfig

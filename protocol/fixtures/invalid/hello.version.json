@@ -1,0 +1,8 @@
+{
+  "type": "client.hello",
+  "protocol_version": 2,
+  "role": "extension",
+  "token": "0123456789abcdef0123456789abcdef",
+  "installation_id": "b61b254a-172b-4b81-9232-c870935f2cc3",
+  "extension_version": "0.1.2"
+}

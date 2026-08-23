@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Elsewise synthetic captions</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        color: #e7efed;
+        background: #101313;
+        font: 16px system-ui;
+      }
+      main {
+        width: min(680px, calc(100% - 40px));
+      }
+      [data-elsewise-captions] {
+        min-height: 120px;
+        margin-top: 24px;
+        padding: 18px;
+        border: 1px solid #394541;
+        border-radius: 14px;
+        background: #171b1a;
+      }
+      [data-utterance-id] {
+        margin: 8px 0;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Synthetic caption harness</h1>
+      <p>Controlled DOM for extension end-to-end tests.</p>
+      <section data-elsewise-captions aria-live="polite"></section>
+    </main>
+  </body>
+</html>

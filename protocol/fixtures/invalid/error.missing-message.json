@@ -1,0 +1,6 @@
+{
+  "type": "protocol.error",
+  "protocol_version": 1,
+  "code": "invalid_message",
+  "recoverable": true
+}

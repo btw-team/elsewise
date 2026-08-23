@@ -1,0 +1,15 @@
+{
+  "type": "source.status",
+  "protocol_version": 1,
+  "event_id": "bc4fca33-30ff-4fa1-a787-a5d91e1e28be",
+  "source_id": "zoom-document-4",
+  "tab_id": 4,
+  "document_id": "zoom-document-4",
+  "client_seq": 1,
+  "platform": "zoom",
+  "enabled": true,
+  "captions_status": "on_empty",
+  "speaker_detection": "unknown",
+  "meeting_key": "wc/fixture-meeting",
+  "observed_at": "2026-08-16T12:00:00.000Z"
+}

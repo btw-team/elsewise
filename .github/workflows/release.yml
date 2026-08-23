@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-tag:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.8.14"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build --workspace web
+      - run: uv sync --frozen
+      - name: Require a stable version tag from main
+        shell: bash
+        run: |
+          git fetch --no-tags origin main
+          version=$(uv run python scripts/version.py --check)
+          if [[ "$GITHUB_REF_NAME" != "v${version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match product version v${version}." >&2
+            exit 1
+          fi
+          commit=$(git rev-parse "${GITHUB_REF}^{commit}")
+          if ! git merge-base --is-ancestor "$commit" origin/main; then
+            echo "Release tag must point to a commit contained in main." >&2
+            exit 1
+          fi
+
+  artifacts:
+    needs: validate-tag
+    permissions:
+      contents: read
+    uses: ./.github/workflows/build.yml
+
+  publish:
+    needs: [validate-tag, artifacts]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-bundle
+          path: release-assets
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release-assets/* \
+            --verify-tag \
+            --generate-notes \
+            --title "Elsewise ${{ needs.artifacts.outputs.version }}"

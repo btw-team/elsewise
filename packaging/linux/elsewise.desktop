@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Elsewise
+Comment=Local browser meeting caption companion
+Exec=elsewise-gui
+Icon=elsewise
+Terminal=false
+Categories=Office;Utility;
+StartupNotify=true

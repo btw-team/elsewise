@@ -1,0 +1,102 @@
+:root {
+  --color-canvas: #1b2229;
+  --color-surface: #26313b;
+  --color-border-strong: #546773;
+  --color-text: #edf5f7;
+  --color-text-soft: #cad7dc;
+  --color-accent: #03b8e9;
+  --color-accent-strong: #17d3cf;
+  --color-primary: #03b8e9;
+  --color-primary-fill: #0a708a;
+  --color-on-accent: #071c22;
+  --color-focus-ring: #36d1ef;
+  color: var(--color-text);
+  background: var(--color-canvas);
+  font-family:
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#gui {
+  width: 100%;
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+}
+
+#gui {
+  display: block;
+  border: 0;
+}
+
+#gui[hidden] {
+  display: none;
+}
+
+.server-status {
+  display: grid;
+  min-height: 100%;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: var(--color-canvas);
+}
+
+.server-status[hidden] {
+  display: none;
+}
+
+.server-status p {
+  margin: 0;
+  color: var(--color-text-soft);
+  font-size: 15px;
+}
+
+.server-status button {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid var(--color-primary);
+  border-radius: 8px;
+  color: var(--color-on-accent);
+  background: linear-gradient(
+    135deg,
+    var(--color-accent),
+    var(--color-accent-strong)
+  );
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.server-status button:hover {
+  filter: brightness(1.06);
+}
+.server-status button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
