@@ -95,6 +95,11 @@ const daemon = spawn(
     cwd: root,
     env: {
       ...process.env,
+      ELSEWISE_DATA_DIR: join(temporary, "data"),
+      ELSEWISE_CONFIG_DIR: join(temporary, "config"),
+      ELSEWISE_CACHE_DIR: join(temporary, "cache"),
+      ELSEWISE_RUNTIME_DIR: join(temporary, "runtime"),
+      ELSEWISE_DIAGNOSTICS_DIR: join(temporary, "diagnostics"),
       ELSEWISE_DATABASE_URL: `sqlite:///${join(temporary, "e2e.sqlite3")}`,
       ELSEWISE_PAIRING_PATH: join(temporary, "pairing.json"),
       ELSEWISE_AGENT_PROVIDER: "fake",
