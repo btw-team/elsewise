@@ -871,6 +871,10 @@ def main() -> None:
                 language=language,
                 theme=theme,
             )
+            if os.environ.get("ELSEWISE_FROZEN_GUI_SMOKE_TEST") == "1":
+                application.update_idletasks()
+                _LOGGER.info("Elsewise Launcher GUI smoke test passed")
+                return
             instance.start_listener(application.request_activation)
             application.start_services()
             _LOGGER.info("Elsewise Launcher ready")
