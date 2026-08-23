@@ -1,0 +1,31 @@
+{
+  "name": "elsewise-monorepo",
+  "private": true,
+  "version": "0.1.2",
+  "license": "Apache-2.0",
+  "workspaces": [
+    "extension",
+    "web"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces --if-present",
+    "coverage": "npm run coverage --workspaces --if-present",
+    "format": "prettier --write README.md package.json tsconfig.base.json protocol extension web tests/e2e tests/fixtures --ignore-path .gitignore",
+    "format:check": "prettier --check README.md package.json tsconfig.base.json protocol extension web tests/e2e tests/fixtures --ignore-path .gitignore",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e:extension": "node tests/e2e/synthetic-extension.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "playwright": "^1.55.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.9.2",
+    "typescript-eslint": "^8.40.0",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

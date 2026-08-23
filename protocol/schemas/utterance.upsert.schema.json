@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://elsewise.local/protocol/v1/utterance.upsert.schema.json",
+  "title": "Utterance upsert",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "type",
+    "protocol_version",
+    "event_id",
+    "source_id",
+    "client_seq",
+    "platform",
+    "meeting_key",
+    "utterance_id",
+    "revision",
+    "text",
+    "observed_at"
+  ],
+  "properties": {
+    "type": { "const": "utterance.upsert" },
+    "protocol_version": { "const": 1 },
+    "event_id": { "type": "string", "format": "uuid" },
+    "source_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "client_seq": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "platform": {
+      "enum": ["google_meet", "microsoft_teams", "zoom", "synthetic"]
+    },
+    "meeting_key": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "utterance_id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "revision": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+    "speaker": { "type": ["string", "null"], "maxLength": 512 },
+    "text": { "type": "string", "minLength": 1, "maxLength": 20000 },
+    "observed_at": { "type": "string", "format": "date-time" }
+  }
+}

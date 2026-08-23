@@ -1,0 +1,11 @@
+{
+  "minimum_chrome_version": "116",
+  "permissions": ["sidePanel"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

@@ -1,0 +1,76 @@
+{
+  "cases": [
+    {
+      "file": "valid/client.hello.json",
+      "schema": "client.hello",
+      "valid": true
+    },
+    {
+      "file": "valid/source.status.json",
+      "schema": "source.status",
+      "valid": true
+    },
+    {
+      "file": "valid/source.zoom.json",
+      "schema": "source.status",
+      "valid": true
+    },
+    {
+      "file": "valid/utterance.upsert.json",
+      "schema": "utterance.upsert",
+      "valid": true
+    },
+    {
+      "file": "valid/utterance.finalize.json",
+      "schema": "utterance.finalize",
+      "valid": true
+    },
+    { "file": "valid/event.ack.json", "schema": "event.ack", "valid": true },
+    { "file": "valid/ui.event.json", "schema": "ui.event", "valid": true },
+    {
+      "file": "valid/protocol.error.json",
+      "schema": "protocol.error",
+      "valid": true
+    },
+    {
+      "file": "invalid/hello.version.json",
+      "schema": "client.hello",
+      "valid": false
+    },
+    {
+      "file": "invalid/source.unknown-field.json",
+      "schema": "source.status",
+      "valid": false
+    },
+    {
+      "file": "invalid/upsert.empty-text.json",
+      "schema": "utterance.upsert",
+      "valid": false
+    },
+    {
+      "file": "invalid/upsert.bad-time.json",
+      "schema": "utterance.upsert",
+      "valid": false
+    },
+    {
+      "file": "invalid/finalize.zero-revision.json",
+      "schema": "utterance.finalize",
+      "valid": false
+    },
+    {
+      "file": "invalid/ack.unknown-result.json",
+      "schema": "event.ack",
+      "valid": false
+    },
+    {
+      "file": "invalid/ui.bad-payload.json",
+      "schema": "ui.event",
+      "valid": false
+    },
+    {
+      "file": "invalid/error.missing-message.json",
+      "schema": "protocol.error",
+      "valid": false
+    }
+  ]
+}
