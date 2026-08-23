@@ -129,9 +129,11 @@ describe("App content", () => {
     );
 
     fireEvent.keyDown(document, { key: "Escape" });
-    expect(
-      screen.queryByRole("dialog", { name: "About Elsewise" }),
-    ).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "About Elsewise" }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
   it("renders About in the current non-English GUI language", async () => {

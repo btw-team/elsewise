@@ -35,6 +35,7 @@ hiddenimports = (
     collect_submodules("uvicorn")
     + collect_submodules("websockets")
     + collect_submodules("elsewise.services")
+    + ["PIL._tkinter_finder"]
 )
 
 
