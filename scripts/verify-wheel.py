@@ -13,6 +13,7 @@ def main() -> None:
         "elsewise/exports/markdown.py",
         "elsewise/migrations/env.py",
         "elsewise/migrations/versions/0001_initial.py",
+        "elsewise/protocol/schema_files/client.hello.schema.json",
         "elsewise/web_dist/index.html",
     }
     with ZipFile(wheel) as archive:

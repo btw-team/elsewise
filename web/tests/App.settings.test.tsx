@@ -168,6 +168,19 @@ describe("App settings", () => {
       expect(writeText).toHaveBeenCalledWith(pairingSettings.token),
     );
 
+    writeText.mockRejectedValueOnce(
+      new DOMException("Not allowed", "NotAllowedError"),
+    );
+    const execCommand = vi.fn(() => true);
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: execCommand,
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Copy token" }));
+    await waitFor(() => expect(execCommand).toHaveBeenCalledWith("copy"));
+    expect(document.querySelector('textarea[aria-hidden="true"]')).toBeNull();
+    Reflect.deleteProperty(document, "execCommand");
+
     fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
     await waitFor(() => expect(token).toHaveValue("regenerated-pairing-token"));
     expect(vi.mocked(fetch)).toHaveBeenCalledWith(

@@ -20,6 +20,7 @@ if not (WEB_DIST / "index.html").is_file():
 common_datas = [
     (str(WEB_DIST), "elsewise/web_dist"),
     (str(MIGRATIONS), "elsewise/migrations"),
+    (str(ROOT / "protocol" / "schemas"), "elsewise/protocol/schema_files"),
     (str(ASSETS / "elsewise-logo-dark.png"), "elsewise/assets"),
     (str(ASSETS / "elsewise-logo-light.png"), "elsewise/assets"),
     (str(ASSETS / "white-bunny-avatar.png"), "elsewise/assets"),
@@ -122,6 +123,7 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleDisplayName": "Elsewise",
             "CFBundleName": "Elsewise",
+            "CFBundleExecutable": "elsewise-gui",
             "LSMinimumSystemVersion": "12.0",
             "NSHighResolutionCapable": True,
         },

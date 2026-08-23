@@ -9,8 +9,11 @@ import tempfile
 import time
 import urllib.request
 from pathlib import Path
+from plistlib import load as load_plist
+from uuid import uuid4
 
 from PyInstaller.archive.readers import CArchiveReader
+from websockets.sync.client import connect
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE = ROOT / "dist/frozen/Elsewise"
@@ -27,7 +30,14 @@ def gui_archive_executable() -> Path:
 
 def gui_smoke_executable() -> Path:
     if sys.platform == "darwin":
-        return ROOT / "dist/frozen/Elsewise.app/Contents/MacOS/elsewise-gui"
+        app = ROOT / "dist/frozen/Elsewise.app"
+        with (app / "Contents/Info.plist").open("rb") as plist_file:
+            executable_name = load_plist(plist_file).get("CFBundleExecutable")
+        if executable_name != "elsewise-gui":
+            raise RuntimeError(
+                f"Frozen macOS bundle has an invalid CFBundleExecutable: {executable_name!r}"
+            )
+        return app / "Contents/MacOS" / executable_name
     return gui_archive_executable()
 
 
@@ -81,12 +91,12 @@ def smoke_gui(gui: Path) -> None:
             )
 
 
-def wait_for_health(timeout: float = 20.0) -> dict[str, object]:
+def wait_for_health(port: int, timeout: float = 20.0) -> dict[str, object]:
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
         try:
             with urllib.request.urlopen(
-                "http://127.0.0.1:38473/api/health", timeout=1.0
+                f"http://127.0.0.1:{port}/api/health", timeout=1.0
             ) as response:
                 return json.loads(response.read().decode("utf-8"))
         except OSError:
@@ -94,10 +104,36 @@ def wait_for_health(timeout: float = 20.0) -> dict[str, object]:
     raise RuntimeError("Frozen server did not become ready")
 
 
-def ensure_port_available() -> None:
+def available_port() -> int:
     with socket.socket() as probe:
-        if probe.connect_ex(("127.0.0.1", 38473)) == 0:
-            raise RuntimeError("Port 38473 is already in use; refusing frozen smoke test")
+        probe.bind(("127.0.0.1", 0))
+        return int(probe.getsockname()[1])
+
+
+def smoke_ingest_protocol(root: Path, port: int, version: str) -> None:
+    pairing_path = root / "config/pairing.json"
+    pairing = json.loads(pairing_path.read_text(encoding="utf-8"))
+    with connect(
+        f"ws://127.0.0.1:{port}/ws/ingest",
+        origin="chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        open_timeout=3,
+        close_timeout=1,
+    ) as websocket:
+        websocket.send(
+            json.dumps(
+                {
+                    "type": "client.hello",
+                    "protocol_version": 1,
+                    "role": "extension",
+                    "token": pairing["token"],
+                    "installation_id": str(uuid4()),
+                    "extension_version": version,
+                }
+            )
+        )
+        response = json.loads(websocket.recv(timeout=3))
+        if response.get("type") != "server.hello":
+            raise RuntimeError(f"Frozen ingest handshake failed: {response}")
 
 
 def main() -> None:
@@ -111,6 +147,7 @@ def main() -> None:
         executable("elsewise-server"),
         BUNDLE / "_internal/elsewise/web_dist/index.html",
         BUNDLE / "_internal/elsewise/migrations/versions/0001_initial.py",
+        BUNDLE / "_internal/elsewise/protocol/schema_files/client.hello.schema.json",
         BUNDLE / "_internal/elsewise/assets/elsewise-logo-dark.png",
         BUNDLE / "_internal/elsewise/assets/elsewise-logo-light.png",
         BUNDLE / "_internal/elsewise/assets/theme-tokens.json",
@@ -125,7 +162,6 @@ def main() -> None:
         raise RuntimeError(f"Frozen bundle is missing required files: {missing}")
     verify_gui_archive(gui_archive)
     smoke_gui(gui_smoke)
-    ensure_port_available()
 
     with tempfile.TemporaryDirectory(prefix="elsewise-frozen-smoke-") as temporary:
         root = Path(temporary)
@@ -133,16 +169,37 @@ def main() -> None:
         version = subprocess.run(
             [cli, "--version"], env=environment, check=True, capture_output=True, text=True
         ).stdout.strip()
-        try:
-            subprocess.run([cli, "start"], env=environment, check=True, timeout=30)
-            health = wait_for_health()
-            if health.get("version") != version:
-                raise RuntimeError(f"Frozen version mismatch: {health} != {version}")
-            with urllib.request.urlopen("http://127.0.0.1:38473/", timeout=2.0) as response:
-                if b'<div id="root"></div>' not in response.read():
-                    raise RuntimeError("Frozen web GUI entry point was not served")
-        finally:
-            subprocess.run([cli, "stop"], env=environment, check=False, timeout=30)
+        port = available_port()
+        server_log_path = root / "server-smoke.log"
+        with server_log_path.open("wb") as server_log:
+            server = subprocess.Popen(
+                [executable("elsewise-server"), "--host", "127.0.0.1", "--port", str(port)],
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=server_log,
+                stderr=subprocess.STDOUT,
+            )
+            try:
+                health = wait_for_health(port)
+                if health.get("version") != version:
+                    raise RuntimeError(f"Frozen version mismatch: {health} != {version}")
+                smoke_ingest_protocol(root, port, version)
+                with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=2.0) as response:
+                    if b'<div id="root"></div>' not in response.read():
+                        raise RuntimeError("Frozen web GUI entry point was not served")
+            except Exception as exc:
+                server_log.flush()
+                output = server_log_path.read_text(encoding="utf-8", errors="replace")
+                raise RuntimeError(
+                    f"Frozen server smoke test failed.\nserver.log:\n{output}"
+                ) from exc
+            finally:
+                server.terminate()
+                try:
+                    server.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    server.kill()
+                    server.wait(timeout=5)
     print(f"Verified frozen Elsewise {version}")
 
 

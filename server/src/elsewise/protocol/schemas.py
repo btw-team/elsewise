@@ -10,9 +10,16 @@ def protocol_root() -> Path:
     return Path(__file__).resolve().parents[4] / "protocol"
 
 
+def schema_root() -> Path:
+    packaged = Path(__file__).resolve().with_name("schema_files")
+    if packaged.is_dir():
+        return packaged
+    return protocol_root() / "schemas"
+
+
 @lru_cache
 def schema_validator(message_type: str) -> Draft202012Validator:
-    path = protocol_root() / "schemas" / f"{message_type}.schema.json"
+    path = schema_root() / f"{message_type}.schema.json"
     schema: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     return Draft202012Validator(schema, format_checker=FormatChecker())
