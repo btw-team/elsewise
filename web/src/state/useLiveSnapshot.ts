@@ -219,6 +219,7 @@ export function useLiveSnapshot(selectedId: string | null): {
   loading: boolean;
   connected: boolean;
   error: string | null;
+  settingsRevision: number;
   refresh: () => Promise<void>;
   loadEarlierUtterances: () => Promise<number>;
   loadEarlierAgentHistory: () => Promise<number>;
@@ -228,6 +229,7 @@ export function useLiveSnapshot(selectedId: string | null): {
   const [loading, setLoading] = useState(true);
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [settingsRevision, setSettingsRevision] = useState(0);
   const cursor = useRef(0);
   const latestRefresh = useRef(0);
   const refreshing = useRef(false);
@@ -377,6 +379,9 @@ export function useLiveSnapshot(selectedId: string | null): {
         }
         if (event.event_id <= cursor.current) return;
         cursor.current = event.event_id;
+        if (event.event_type === "settings.changed") {
+          setSettingsRevision(event.event_id);
+        }
         if (refreshing.current) {
           bufferedEvents.current.push(event);
           return;
@@ -411,6 +416,7 @@ export function useLiveSnapshot(selectedId: string | null): {
     loading,
     connected,
     error,
+    settingsRevision,
     refresh,
     loadEarlierUtterances,
     loadEarlierAgentHistory,

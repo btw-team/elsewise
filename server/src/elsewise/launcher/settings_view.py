@@ -6,7 +6,7 @@ from typing import Any
 import customtkinter as ctk  # type: ignore[import-untyped]
 
 from elsewise.launcher.i18n import Translator
-from elsewise.launcher.theme import TOKENS
+from elsewise.launcher.theme import TOKENS, current_theme
 from elsewise.settings.languages import (
     LANGUAGE_DISPLAY_NAMES,
     SUPPORTED_LANGUAGE_SET,
@@ -19,6 +19,14 @@ class _WidthMatchedOptionMenu(ctk.CTkOptionMenu):  # type: ignore[misc]
     """Option menu whose native dropdown follows the rendered widget width."""
 
     _DEFAULT_DROPDOWN_CHARACTERS = 18
+
+    def _draw(self, no_color_updates: bool = False) -> None:
+        super()._draw(no_color_updates)
+        if self._state != "disabled":
+            self._canvas.itemconfig(
+                "dropdown_arrow",
+                fill=self._apply_appearance_mode(TOKENS.primary_text),
+            )
 
     def _open_dropdown_menu(self) -> None:
         dropdown = self._dropdown_menu
@@ -38,6 +46,30 @@ class _WidthMatchedOptionMenu(ctk.CTkOptionMenu):  # type: ignore[misc]
         super()._open_dropdown_menu()
 
 
+class _SelectedTextSegmentedButton(ctk.CTkSegmentedButton):  # type: ignore[misc]
+    """Segmented control with distinct selected and unselected text colors."""
+
+    def __init__(
+        self,
+        *args: Any,
+        selected_text_color: str,
+        unselected_text_color: str,
+        **kwargs: Any,
+    ) -> None:
+        self._selected_text_color = selected_text_color
+        self._unselected_text_color = unselected_text_color
+        super().__init__(*args, text_color=unselected_text_color, **kwargs)
+
+    def _unselect_button_by_value(self, value: str) -> None:
+        super()._unselect_button_by_value(value)
+        if value in self._buttons_dict:
+            self._buttons_dict[value].configure(text_color=self._unselected_text_color)
+
+    def _select_button_by_value(self, value: str) -> None:
+        super()._select_button_by_value(value)
+        self._buttons_dict[value].configure(text_color=self._selected_text_color)
+
+
 class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
     def __init__(
         self,
@@ -48,8 +80,10 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
         store: LauncherSettingsStore,
         pairing: PairingManager,
         language: str,
+        theme: str,
         server_running: Callable[[], bool],
         on_language: Callable[[str], None],
+        on_theme: Callable[[str], None],
         on_install_cli: Callable[[], str] | None = None,
         on_remove_cli: Callable[[], str] | None = None,
     ) -> None:
@@ -60,14 +94,15 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
         self.pairing = pairing
         self.server_running = server_running
         self.on_language = on_language
+        self.on_theme = on_theme
         settings = store.load()
         self.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
             self,
             text=translator.text("settings"),
             text_color=TOKENS.text,
-            font=ctk.CTkFont(family=family, size=22, weight="bold"),
-        ).grid(row=0, column=0, padx=28, pady=(26, 18), sticky="w")
+            font=ctk.CTkFont(family=family, size=26, weight="normal"),
+        ).grid(row=0, column=0, padx=28, pady=(22, 18), sticky="w")
         card = ctk.CTkFrame(
             self,
             fg_color=TOKENS.surface,
@@ -84,14 +119,37 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
             values=list(LANGUAGE_DISPLAY_NAMES.values()),
             command=self._language_changed,
             fg_color=TOKENS.surface_raised,
-            button_color=TOKENS.accent_deep,
-            button_hover_color=TOKENS.accent,
+            button_color=TOKENS.accent,
+            button_hover_color=TOKENS.accent_strong,
             text_color=TOKENS.text,
+            dropdown_fg_color=(
+                TOKENS.panel if current_theme() == "light" else TOKENS.surface_raised
+            ),
+            dropdown_hover_color=TOKENS.surface_active,
+            dropdown_text_color=TOKENS.text,
             font=ctk.CTkFont(family=family, size=13),
         )
         selected_language = language if language in SUPPORTED_LANGUAGE_SET else "en"
         self.language_menu.set(LANGUAGE_DISPLAY_NAMES[selected_language])
         self.language_menu.grid(row=0, column=1, padx=18, pady=12, sticky="ew")
+
+        self._add_field_label(card, translator.text("interface_theme"), 1)
+        theme_values = [translator.text("dark_theme"), translator.text("light_theme")]
+        self.theme_control = _SelectedTextSegmentedButton(
+            card,
+            values=theme_values,
+            command=self._theme_changed,
+            fg_color=TOKENS.surface_raised,
+            selected_color=TOKENS.accent,
+            selected_hover_color=TOKENS.accent_strong,
+            unselected_color=TOKENS.surface_raised,
+            unselected_hover_color=TOKENS.surface_active,
+            selected_text_color=TOKENS.primary_text,
+            unselected_text_color=TOKENS.text,
+            font=ctk.CTkFont(family=family, size=13),
+        )
+        self.theme_control.set(theme_values[0 if theme != "light" else 1])
+        self.theme_control.grid(row=1, column=1, padx=18, pady=12, sticky="ew")
 
         self.start_var = ctk.BooleanVar(value=settings.start_server_on_launch)
         self.check_var = ctk.BooleanVar(value=settings.check_updates_on_launch)
@@ -100,39 +158,44 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
             card,
             translator.text("start_on_launch"),
             self.start_var,
-            1,
+            2,
             lambda: self._save(start_server_on_launch=self.start_var.get()),
         )
         self._checkbox(
             card,
             translator.text("check_updates_on_launch"),
             self.check_var,
-            2,
+            3,
             lambda: self._save(check_updates_on_launch=self.check_var.get()),
         )
-        self._add_field_label(card, translator.text("maximum_log_storage"), 3)
+        self._add_field_label(card, translator.text("maximum_log_storage"), 4)
         self.log_menu = _WidthMatchedOptionMenu(
             card,
             values=[f"{value} MB" for value in settings.supported_log_limits()],
             command=self._log_limit_changed,
             fg_color=TOKENS.surface_raised,
-            button_color=TOKENS.accent_deep,
-            button_hover_color=TOKENS.accent,
+            button_color=TOKENS.accent,
+            button_hover_color=TOKENS.accent_strong,
             text_color=TOKENS.text,
+            dropdown_fg_color=(
+                TOKENS.panel if current_theme() == "light" else TOKENS.surface_raised
+            ),
+            dropdown_hover_color=TOKENS.surface_active,
+            dropdown_text_color=TOKENS.text,
             font=ctk.CTkFont(family=family, size=13),
         )
         self.log_menu.set(f"{settings.server_log_total_limit_mb} MB")
-        self.log_menu.grid(row=3, column=1, padx=18, pady=12, sticky="ew")
+        self.log_menu.grid(row=4, column=1, padx=18, pady=12, sticky="ew")
         self._checkbox(
             card,
             translator.text("stop_on_exit"),
             self.stop_var,
-            4,
+            5,
             lambda: self._save(stop_server_on_exit=self.stop_var.get()),
         )
         if on_install_cli is not None and on_remove_cli is not None:
             cli_actions = ctk.CTkFrame(card, fg_color="transparent")
-            cli_actions.grid(row=5, column=0, columnspan=2, padx=16, pady=8, sticky="ew")
+            cli_actions.grid(row=6, column=0, columnspan=2, padx=16, pady=8, sticky="ew")
             cli_actions.grid_columnconfigure((0, 1), weight=1)
             install_button = self._action_button(
                 cli_actions,
@@ -223,6 +286,9 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
             (code for code, display in LANGUAGE_DISPLAY_NAMES.items() if display == name), "en"
         )
         self.on_language(language)
+
+    def _theme_changed(self, name: str) -> None:
+        self.on_theme("light" if name == self.translator.text("light_theme") else "dark")
 
     def _log_limit_changed(self, value: str) -> None:
         limit = int(value.split()[0])

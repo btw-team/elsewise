@@ -1,11 +1,15 @@
 :root {
-  --color-canvas: #0f0e0d;
-  --color-surface: #191714;
-  --color-border-strong: #55483a;
-  --color-text: #e7d9c7;
-  --color-text-soft: #cab8a3;
-  --color-primary: #a8473f;
-  --color-primary-fill: #71302b;
+  --color-canvas: #1b2229;
+  --color-surface: #26313b;
+  --color-border-strong: #546773;
+  --color-text: #edf5f7;
+  --color-text-soft: #cad7dc;
+  --color-accent: #03b8e9;
+  --color-accent-strong: #17d3cf;
+  --color-primary: #03b8e9;
+  --color-primary-fill: #0a708a;
+  --color-on-accent: #071c22;
+  --color-focus-ring: #36d1ef;
   color: var(--color-text);
   background: var(--color-canvas);
   font-family:
@@ -70,13 +74,29 @@ body {
   padding: 8px 14px;
   border: 1px solid var(--color-primary);
   border-radius: 8px;
-  color: var(--color-text);
-  background: var(--color-primary-fill);
+  color: var(--color-on-accent);
+  background: linear-gradient(
+    135deg,
+    var(--color-accent),
+    var(--color-accent-strong)
+  );
   font: inherit;
   font-weight: 700;
   cursor: pointer;
 }
 
 .server-status button:hover {
-  background: #873a34;
+  filter: brightness(1.06);
+}
+.server-status button:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

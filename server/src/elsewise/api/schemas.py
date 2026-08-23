@@ -100,6 +100,7 @@ class GlobalSettingsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     ui_language: SupportedLanguage | None = None
+    ui_theme: Literal["dark", "light"] | None = None
     default_meeting_language: SupportedLanguage | None = None
     default_agent_provider: str | None = Field(default=None, max_length=32)
     default_agent_model: str | None = Field(default=None, max_length=128)

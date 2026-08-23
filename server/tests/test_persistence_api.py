@@ -507,6 +507,25 @@ def test_french_prompts_and_global_permission_defaults_seed_new_sessions(
 
 
 @pytest.mark.integration
+def test_global_theme_validation_persistence_and_settings_event(tmp_path: Path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{tmp_path / 'theme.sqlite3'}",
+        pairing_path=tmp_path / "pairing.json",
+        settings_path=tmp_path / "settings.json",
+        agent_provider=FakeAgentProvider(),
+    )
+    with TestClient(app, base_url="http://127.0.0.1:38473") as client:
+        assert client.get("/api/settings").json()["ui_theme"] == "dark"
+        changed = client.patch("/api/settings", json={"ui_theme": "light"})
+        assert changed.status_code == 200
+        assert changed.json()["ui_theme"] == "light"
+        assert client.patch("/api/settings", json={"ui_theme": "system"}).status_code == 422
+        events = client.get("/api/ui-events", params={"since": 0}).json()["events"]
+        event = next(item for item in events if item["event_type"] == "settings.changed")
+        assert event["payload"] == {"ui_language": "en", "ui_theme": "light"}
+
+
+@pytest.mark.integration
 def test_global_initial_prompts_can_be_reset_to_defaults(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'prompt-reset.sqlite3'}",

@@ -28,21 +28,22 @@ class AboutFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
             self,
             text=translator.text("about"),
             text_color=TOKENS.text,
-            font=ctk.CTkFont(family=family, size=22, weight="bold"),
-        ).grid(row=0, column=0, padx=28, pady=(26, 16), sticky="w")
+            font=ctk.CTkFont(family=family, size=26, weight="normal"),
+        ).grid(row=0, column=0, padx=28, pady=(22, 16), sticky="w")
 
         hero = self._card(row=1)
-        logo = self._image("elsewise-logo.png", (92, 92))
+        brand_line = ctk.CTkFrame(hero, fg_color="transparent")
+        brand_line.grid(row=0, column=0, padx=18, pady=(18, 12), sticky="w")
+        logo = self._theme_logo((240, 38))
         if logo is not None:
-            ctk.CTkLabel(hero, text="", image=logo).grid(
-                row=0, column=0, rowspan=4, padx=18, pady=18, sticky="n"
-            )
+            ctk.CTkLabel(brand_line, text="", image=logo).grid(row=0, column=0, sticky="w")
         ctk.CTkLabel(
-            hero,
-            text=f"Elsewise  v{__version__}",
-            text_color=TOKENS.accent_strong,
-            font=ctk.CTkFont(family=family, size=20, weight="bold"),
-        ).grid(row=0, column=1, padx=8, pady=(18, 6), sticky="w")
+            brand_line,
+            text=f"v{__version__}",
+            height=14,
+            text_color=TOKENS.text_muted,
+            font=ctk.CTkFont(family=family, size=12, weight="bold"),
+        ).grid(row=0, column=1, padx=(12, 0), sticky="s")
         hero_labels: list[ctk.CTkLabel] = []
         for row, key in enumerate(("about_description", "about_local_first", "about_cli"), 1):
             label = ctk.CTkLabel(
@@ -53,10 +54,10 @@ class AboutFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
                 text_color=TOKENS.text_soft if row == 1 else TOKENS.text_muted,
                 font=ctk.CTkFont(family=family, size=13),
             )
-            label.grid(row=row, column=1, padx=8, pady=4, sticky="ew")
+            label.grid(row=row, column=0, padx=18, pady=4, sticky="ew")
             hero_labels.append(label)
-        hero.grid_columnconfigure(1, weight=1)
-        self._bind_dynamic_wrap(hero, hero_labels, horizontal_inset=152)
+        hero.grid_columnconfigure(0, weight=1)
+        self._bind_dynamic_wrap(hero, hero_labels, horizontal_inset=36)
 
         facts = self._card(row=2)
         self._link_row(
@@ -80,15 +81,19 @@ class AboutFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
 
         stack = self._card(row=3)
         self._section_label(stack, translator.text("core_stack"), 0, family)
-        core_stack = ctk.CTkLabel(
-            stack,
-            text="Python · FastAPI · CustomTkinter · React · TypeScript · SQLite · WebExtensions",
-            justify="left",
-            anchor="w",
-            text_color=TOKENS.text_soft,
-            font=ctk.CTkFont(family=family, size=13),
-        )
-        core_stack.grid(row=1, column=0, padx=18, pady=(4, 14), sticky="ew")
+        tags = ctk.CTkFrame(stack, fg_color="transparent")
+        tags.grid(row=1, column=0, padx=18, pady=(4, 14), sticky="w")
+        for index, technology in enumerate(
+            ("Python", "FastAPI", "CustomTkinter", "React", "TypeScript", "SQLite", "WebExtensions")
+        ):
+            ctk.CTkLabel(
+                tags,
+                text=technology,
+                fg_color=TOKENS.surface_raised,
+                corner_radius=6,
+                text_color=TOKENS.text_soft,
+                font=ctk.CTkFont(family=family, size=12),
+            ).pack(side="left", padx=(0, 6) if index < 6 else 0, ipadx=7, ipady=3)
         self._section_label(stack, translator.text("third_party"), 2, family)
         third_party = ctk.CTkLabel(
             stack,
@@ -100,7 +105,7 @@ class AboutFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
         )
         third_party.grid(row=3, column=0, padx=18, pady=(4, 14), sticky="ew")
         stack.grid_columnconfigure(0, weight=1)
-        self._bind_dynamic_wrap(stack, [core_stack, third_party], horizontal_inset=36)
+        self._bind_dynamic_wrap(stack, [third_party], horizontal_inset=36)
 
         footer = self._card(row=4)
         avatar = self._image("white-bunny-avatar.png", (44, 44), corner_radius=9)
@@ -164,6 +169,19 @@ class AboutFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
             )
             prepared.putalpha(mask)
         image = ctk.CTkImage(prepared, size=size)
+        self._images.append(image)
+        return image
+
+    def _theme_logo(self, size: tuple[int, int]) -> ctk.CTkImage | None:
+        dark_path = asset_path("elsewise-logo-dark.png")
+        light_path = asset_path("elsewise-logo-light.png")
+        if dark_path is None or light_path is None:
+            return None
+        with Image.open(dark_path) as source:
+            dark = source.convert("RGBA")
+        with Image.open(light_path) as source:
+            light = source.convert("RGBA")
+        image = ctk.CTkImage(light_image=light, dark_image=dark, size=size)
         self._images.append(image)
         return image
 
@@ -262,7 +280,7 @@ class AboutFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
             command=lambda: on_link(target),
             fg_color="transparent",
             hover_color=TOKENS.surface_active,
-            text_color=TOKENS.accent_strong,
+            text_color=TOKENS.accent,
             font=ctk.CTkFont(family=family, size=13, weight="bold"),
         ).grid(row=row, column=1, padx=18, pady=button_padding, sticky="e")
         master.grid_columnconfigure(1, weight=1)

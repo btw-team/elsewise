@@ -50,6 +50,9 @@ update to users.
   available.
 - Verify all six locales in Launcher, web GUI, session language/initial prompt,
   Chrome, and Firefox.
+- Verify both themes in the web GUI and launcher, confirm live synchronization in
+  both directions, then verify the extension's independent theme in its popup and
+  side-panel loading/error states.
 - Exercise Codex and Claude discovery; recording must remain usable when either is
   unavailable.
 - Inspect current and rotated logs for transcript, prompt, response, credential,

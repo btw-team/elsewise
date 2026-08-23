@@ -52,6 +52,14 @@ and its UI outbox event are committed in one transaction.
 cursors. The UI applies simple events directly and resyncs on reconnect, a pruned
 cursor, or an unknown/complex event.
 
+Global settings expose `ui_theme` as `"dark" | "light"` through
+`GET/PATCH /api/settings`. The same field is present in `/api/runtime/status` and
+the runtime WebSocket payload consumed by the launcher. Saving settings emits a
+`settings.changed` UI event, prompting the web GUI to refresh immediately. The web
+GUI uses `elsewise-ui-theme` in `localStorage` only as a first-paint cache; the
+server value remains authoritative. The extension deliberately uses the same key
+in its independent `browser.storage.local` namespace.
+
 ## Extension pairing
 
 The server and launcher share `PairingManager` over `pairing.json` in the resolved

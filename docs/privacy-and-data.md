@@ -51,6 +51,7 @@ and sanitize them before sharing.
 ## Consent and deletion
 
 Users are responsible for participant consent and applicable workplace, privacy,
-and recording rules. Permanently deleting a session has no recovery step. Uninstalling
-the application does not promise to erase user data automatically; remove the
-platform data/config directories separately if complete erasure is required.
+and recording rules for each conversation. Permanently deleting a session has no
+recovery step. Uninstalling the application does not promise to erase user data
+automatically; remove the platform data/config directories separately if complete
+erasure is required.

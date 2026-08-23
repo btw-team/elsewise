@@ -1,5 +1,8 @@
 {
   "appName": { "message": "Elsewise" },
+  "theme": { "message": "Design" },
+  "darkTheme": { "message": "Dunkel" },
+  "lightTheme": { "message": "Hell" },
   "appDescription": {
     "message": "Lokaler Begleiter für Browser-Meeting-Untertitel"
   },

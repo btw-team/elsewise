@@ -42,6 +42,16 @@ def test_global_settings_updates_are_atomic_within_process(tmp_path: Path) -> No
     assert settings.google_meet_own_name == "Meeting user"
 
 
+def test_global_theme_defaults_dark_for_legacy_settings_and_persists(tmp_path: Path) -> None:
+    path = tmp_path / "settings.json"
+    path.write_text('{"ui_language":"fr"}', encoding="utf-8")
+    store = SettingsStore(path)
+
+    assert store.load().ui_theme == "dark"
+    assert store.update({"ui_theme": "light"}).ui_theme == "light"
+    assert SettingsStore(path).load().ui_theme == "light"
+
+
 def test_pairing_regeneration_is_atomic_within_process(tmp_path: Path) -> None:
     manager = PairingManager(tmp_path / "pairing.json")
     workers = 12

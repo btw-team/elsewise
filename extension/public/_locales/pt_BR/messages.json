@@ -1,5 +1,8 @@
 {
   "appName": { "message": "Elsewise" },
+  "theme": { "message": "Tema" },
+  "darkTheme": { "message": "Escuro" },
+  "lightTheme": { "message": "Claro" },
   "appDescription": {
     "message": "Assistente local para legendas de reuniões no navegador"
   },

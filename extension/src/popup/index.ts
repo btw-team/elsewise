@@ -7,6 +7,16 @@ import {
   message,
   type MessageKey,
 } from "../i18n";
+import { initializeTheme, saveTheme, type UiTheme } from "../theme";
+
+const darkLogoUrl = new URL(
+  "../../../web/src/assets/elsewise-logo-dark.svg",
+  import.meta.url,
+).href;
+const lightLogoUrl = new URL(
+  "../../../web/src/assets/elsewise-logo-light.svg",
+  import.meta.url,
+).href;
 
 interface PopupStatus {
   daemon: "connected" | "reconnecting" | "not_paired" | "unavailable";
@@ -114,7 +124,13 @@ function render(status: PopupStatus): void {
     : message("never");
   const badge = element("daemon-badge");
   badge.textContent = localizedValue(status.daemon, statusLabels);
-  badge.classList.toggle("connected", status.daemon === "connected");
+  badge.classList.remove(
+    "connected",
+    "reconnecting",
+    "not-paired",
+    "unavailable",
+  );
+  badge.classList.add(status.daemon.replace("_", "-"));
   const toggle = element<HTMLButtonElement>("toggle");
   const supported = status.platform !== "unsupported";
   toggle.disabled = !supported;
@@ -132,7 +148,26 @@ function render(status: PopupStatus): void {
           : message("hintUnsupported");
 }
 
+element<HTMLImageElement>("brand-logo-dark").src = darkLogoUrl;
+element<HTMLImageElement>("brand-logo-light").src = lightLogoUrl;
 localizeDocument();
+
+function renderTheme(theme: UiTheme): void {
+  for (const candidate of ["dark", "light"] as const) {
+    const button = element<HTMLButtonElement>(`theme-${candidate}`);
+    const selected = candidate === theme;
+    button.classList.toggle("selected", selected);
+    button.setAttribute("aria-pressed", String(selected));
+  }
+}
+
+for (const theme of ["dark", "light"] as const) {
+  element<HTMLButtonElement>(`theme-${theme}`).addEventListener("click", () => {
+    renderTheme(theme);
+    void saveTheme(theme);
+  });
+}
+void initializeTheme(renderTheme);
 
 async function refresh(): Promise<void> {
   const [tab] = await webExtension.tabs.query({

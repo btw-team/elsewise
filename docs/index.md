@@ -1,8 +1,9 @@
 # Elsewise documentation
 
-Elsewise is a local desktop application, loopback server, web GUI, and browser
-extension for capturing browser meeting captions and turning them into practical
-AI-assisted workflows.
+Elsewise is a real-time AI advisor for live conversations. Its browser extension
+follows captions already displayed by supported call platforms, while the local
+desktop application, server, and web GUI turn that context into role-specific,
+editable AI-assisted workflows.
 
 This documentation covers the free and open-source edition published in the
 [`btw-team/elsewise`](https://github.com/btw-team/elsewise) repository.
@@ -17,8 +18,8 @@ This documentation covers the free and open-source edition published in the
   regeneration, and reconnect behavior.
 - [Meeting capture](meeting-capture.md) - Meet, Teams, Zoom Web, speakers, and
   capture lifecycle.
-- [Sessions, actions, and presets](sessions-and-actions.md) - transcript history,
-  context strategies, exports, and customization.
+- [Sessions, actions, and presets](sessions-and-actions.md) - role-specific
+  workflows, context strategies, customization, transcript history, and exports.
 - [Codex and Claude Code](agents.md) - CLI discovery, authentication, models,
   effort, working directories, and permissions.
 - [Privacy and data](privacy-and-data.md) - local storage, cloud boundaries,

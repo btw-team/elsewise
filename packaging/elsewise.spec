@@ -20,10 +20,12 @@ if not (WEB_DIST / "index.html").is_file():
 common_datas = [
     (str(WEB_DIST), "elsewise/web_dist"),
     (str(MIGRATIONS), "elsewise/migrations"),
-    (str(ASSETS / "elsewise-logo.png"), "elsewise/assets"),
+    (str(ASSETS / "elsewise-logo-dark.png"), "elsewise/assets"),
+    (str(ASSETS / "elsewise-logo-light.png"), "elsewise/assets"),
     (str(ASSETS / "white-bunny-avatar.png"), "elsewise/assets"),
     (str(ASSETS / "kofi-icon.png"), "elsewise/assets"),
     (str(ROOT / "shared" / "external-links.json"), "elsewise/assets"),
+    (str(ROOT / "shared" / "theme-tokens.json"), "elsewise/assets"),
     (str(ROOT / "LICENSE"), "."),
     (str(ROOT / "NOTICE"), "."),
     (str(ROOT / "THIRD_PARTY_NOTICES.md"), "."),

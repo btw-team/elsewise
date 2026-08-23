@@ -244,6 +244,7 @@ export function apiPayload(path: string, value: TestSnapshot): unknown {
 
 export const globalSettings: GlobalSettings = {
   ui_language: "en",
+  ui_theme: "dark",
   default_meeting_language: "ru",
   initial_prompts: {
     ru: "RU prompt",
@@ -328,6 +329,7 @@ export function installAppTestHarness(): void {
   beforeEach(() => {
     FakeWebSocket.instances = [];
     globalSettings.ui_language = "en";
+    globalSettings.ui_theme = "dark";
     localStorage.clear();
     vi.stubGlobal("WebSocket", FakeWebSocket);
     vi.stubGlobal(

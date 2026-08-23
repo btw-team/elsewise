@@ -185,6 +185,7 @@ export type AgentProviderId = "codex" | "claude";
 
 export interface GlobalSettings {
   ui_language: SupportedLanguage;
+  ui_theme: "dark" | "light";
   default_meeting_language: SupportedLanguage;
   initial_prompts: Record<SupportedLanguage, string>;
   initial_prompt_version: number;

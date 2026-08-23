@@ -1,5 +1,6 @@
 import { GUI_URL, guiIsAvailable } from "../gui";
 import { localizeDocument, message as translateMessage } from "../i18n";
+import { initializeTheme } from "../theme";
 import "./styles.css";
 
 function element<T extends HTMLElement>(id: string): T {
@@ -14,6 +15,7 @@ const retry = element<HTMLButtonElement>("retry");
 const gui = element<HTMLIFrameElement>("gui");
 
 localizeDocument();
+void initializeTheme();
 
 function showUnavailable(): void {
   gui.hidden = true;

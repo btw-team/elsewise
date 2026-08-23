@@ -87,6 +87,12 @@ describe("App content", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "About Elsewise",
     });
+    expect(
+      within(dialog).queryByRole("heading", { name: "About Elsewise" }),
+    ).not.toBeInTheDocument();
+    expect(
+      within(dialog).getByRole("button", { name: "Close" }),
+    ).toBeInTheDocument();
     expect(within(dialog).getByText("v0.1.2")).toBeInTheDocument();
     expect(
       within(dialog).getByRole("link", { name: "btw-team/elsewise" }),
@@ -116,7 +122,7 @@ describe("App content", () => {
     expect(supportLink).toHaveAttribute("href", "https://ko-fi.com/tychh");
     expect(
       within(dialog).getByText(/Created and maintained by/),
-    ).toHaveTextContent("Created and maintained by BTW Team");
+    ).toHaveTextContent("Created and maintained by btw.team/tychh");
     expect(supportLink.querySelector("img")).toHaveAttribute(
       "src",
       expect.stringContaining("kofi-icon.png"),

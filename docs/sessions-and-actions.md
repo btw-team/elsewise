@@ -1,5 +1,11 @@
 # Sessions, actions, and presets
 
+Elsewise is not tied to one meeting or note-taking workflow. A preset defines the
+kind of help needed during a conversation and exposes a focused set of actions for
+that role. The same transcript engine can therefore behave like an interview aid,
+language-practice partner, negotiation coach, technical reviewer, or a workflow
+designed by the user.
+
 ## Session state and history
 
 Sessions persist transcript segments, utterances, agent runs, and messages in local
@@ -28,9 +34,9 @@ actively recording, including when no session is selected.
 The selected transcript is frozen at click time. Queue delays therefore do not
 silently change the request's context.
 
-## Factory presets
+## Built-in presets
 
-A clean database includes these factory presets:
+A clean database installs these presets as starting points:
 
 - **Default** for general summaries, decisions, follow-ups, risks, and catch-up.
 - **Project Sync** for status, blockers, decisions, next steps, risks, and stakeholder
@@ -58,6 +64,29 @@ it adapts conservatively to the learner's demonstrated language and does not ass
 CEFR level.
 
 Default is the fallback when a referenced preset no longer exists.
+
+## Design your own workflow
+
+Actions and presets are editable in the web GUI whenever no session is actively
+recording. A practical workflow can be built without changing application code:
+
+1. Decide what help a person in this role needs during the conversation.
+2. Create one action for each focused request. Give it a short label, precise prompt,
+   context strategy, amount, and hard character cap.
+3. Create a preset and add only the actions that should be visible together.
+4. Select the preset for a new session and refine it after real use.
+
+Prefer a small set of distinct actions over a large collection of overlapping
+buttons. For example, an interviewee may need **Tech answer**, **My answer**, and
+**Handle gap**, while an interviewer instead needs **Follow up**, **Go deeper**, and
+**Next question**. A language learner can use the same engine through **Hint**,
+**Words**, **Explain**, and **Rescue**.
+
+Treat prompts as instructions for evidence and uncertainty, not just output format.
+State whether the agent may infer, require it to distinguish transcript evidence
+from suggestions, and choose the narrowest context window that still supports the
+task. New built-in workflow proposals should follow the privacy and test-fixture
+rules in [Contributing](../CONTRIBUTING.md).
 
 ## Free prompts and export
 

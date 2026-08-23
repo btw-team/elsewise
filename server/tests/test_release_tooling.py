@@ -60,16 +60,16 @@ def test_release_inventory_and_checksums_are_exact(tmp_path: Path) -> None:
 
 
 def test_nfpm_file_sources_are_repository_relative() -> None:
-    source = (ROOT / "packaging/linux/nfpm.yaml").read_text(encoding="utf-8")
+    nfpm_source = (ROOT / "packaging/linux/nfpm.yaml").read_text(encoding="utf-8")
     file_sources = (
         Path(value)
-        for value in re.findall(r"^\s*- src: (.+)$", source, flags=re.MULTILINE)
+        for value in re.findall(r"^\s*- src: (.+)$", nfpm_source, flags=re.MULTILINE)
         if not value.startswith("/opt/")
     )
 
-    for source in file_sources:
-        assert not source.is_absolute()
-        assert ".." not in source.parts
+    for file_source in file_sources:
+        assert not file_source.is_absolute()
+        assert ".." not in file_source.parts
 
 
 def test_documentation_checker_validates_files_images_and_anchors(tmp_path: Path) -> None:

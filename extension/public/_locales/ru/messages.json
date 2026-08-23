@@ -1,5 +1,8 @@
 {
   "appName": { "message": "Elsewise" },
+  "theme": { "message": "Тема" },
+  "darkTheme": { "message": "Тёмная" },
+  "lightTheme": { "message": "Светлая" },
   "appDescription": {
     "message": "Локальный помощник для субтитров браузерных встреч"
   },

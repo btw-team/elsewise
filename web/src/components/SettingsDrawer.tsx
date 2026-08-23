@@ -21,11 +21,13 @@ import type {
   PairingSettings,
   SupportedLanguage,
 } from "../types";
+import type { UiTheme } from "../theme";
 
 type Translator = (key: TranslationKey) => string;
 
 const emptySettings: GlobalSettings = {
   ui_language: "en",
+  ui_theme: "dark",
   default_meeting_language: "ru",
   initial_prompts: { ru: "", en: "", fr: "", es: "", de: "", "pt-BR": "" },
   initial_prompt_version: 1,
@@ -65,6 +67,8 @@ function ContextStrategyOptions({ t }: { t: Translator }) {
 export function SettingsDrawer({
   uiLanguage,
   setUiLanguage,
+  uiTheme,
+  setUiTheme,
   t,
   onClose,
   onError,
@@ -73,6 +77,8 @@ export function SettingsDrawer({
 }: {
   uiLanguage: UiLanguage;
   setUiLanguage: (language: UiLanguage) => void;
+  uiTheme: UiTheme;
+  setUiTheme: (theme: UiTheme) => void;
   t: Translator;
   onClose: () => void;
   onError: (message: string) => void;
@@ -134,6 +140,23 @@ export function SettingsDrawer({
       onSuccess(t("pairingCopied"));
     } catch {
       onError(t("requestFailed"));
+    }
+  }
+
+  async function changeTheme(next: UiTheme) {
+    if (next === uiTheme) return;
+    const previous = uiTheme;
+    setUiTheme(next);
+    setSettings((current) => ({ ...current, ui_theme: next }));
+    try {
+      const updated = await api.updateSettings({ ui_theme: next });
+      setSettings(updated);
+      onSettingsChanged(updated);
+      onSuccess(t("settingsSaved"));
+    } catch (caught) {
+      setUiTheme(previous);
+      setSettings((current) => ({ ...current, ui_theme: previous }));
+      onError(apiErrorMessage(caught, t));
     }
   }
 
@@ -298,6 +321,26 @@ export function SettingsDrawer({
                   ))}
                 </select>
               </label>
+              <div className="theme-setting">
+                <span>{t("theme")}</span>
+                <div
+                  className="theme-segmented-control"
+                  role="group"
+                  aria-label={t("theme")}
+                >
+                  {(["dark", "light"] as const).map((theme) => (
+                    <button
+                      key={theme}
+                      type="button"
+                      className={uiTheme === theme ? "selected" : ""}
+                      aria-pressed={uiTheme === theme}
+                      onClick={() => void changeTheme(theme)}
+                    >
+                      {t(theme === "dark" ? "darkTheme" : "lightTheme")}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </section>
             <form
               className="pairing-settings"

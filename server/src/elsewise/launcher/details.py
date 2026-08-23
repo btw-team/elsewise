@@ -34,8 +34,8 @@ class DetailsFrame(ctk.CTkFrame):  # type: ignore[misc]
             self,
             text=translator.text("details"),
             text_color=TOKENS.text,
-            font=ctk.CTkFont(family=family, size=22, weight="bold"),
-        ).grid(row=0, column=0, padx=28, pady=(26, 12), sticky="w")
+            font=ctk.CTkFont(family=family, size=26, weight="normal"),
+        ).grid(row=0, column=0, padx=28, pady=(22, 12), sticky="w")
         controls = ctk.CTkFrame(self, fg_color="transparent")
         controls.grid(row=1, column=0, padx=28, pady=(0, 10), sticky="ew")
         self.pause_button = self._button(controls, translator.text("pause"), self._toggle_pause)

@@ -19,6 +19,18 @@ elsewise stop
 Closing the launcher normally leaves the server running. This behavior can be
 changed in Launcher Settings.
 
+### Interface theme
+
+Elsewise starts in the dark theme. Choose **Light** or **Dark** under
+**Settings → Interface** in either the web GUI or desktop launcher. The selection
+is stored in the shared global settings and is applied to both surfaces
+automatically, including when the other surface changes it while open.
+
+The browser extension popup has its own Light/Dark control in the upper-right
+corner. This preference is stored only by the extension and themes the popup and
+the side-panel loading/error shell. It does not override the web GUI displayed
+inside the side panel.
+
 ## 2. Pair the browser extension
 
 The server and launcher create a shared local extension pairing token automatically

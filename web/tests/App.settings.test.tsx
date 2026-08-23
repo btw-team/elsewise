@@ -21,6 +21,39 @@ import {
 installAppTestHarness();
 
 describe("App settings", () => {
+  it("switches and persists the shared interface theme immediately", async () => {
+    const defaultFetch = vi.mocked(fetch).getMockImplementation();
+    vi.mocked(fetch).mockImplementation(async (input, options) => {
+      const path = String(input);
+      if (path.endsWith("/api/settings") && options?.method === "PATCH") {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ ...globalSettings, ui_theme: "light" as const }),
+        } as Response;
+      }
+      if (!defaultFetch)
+        throw new Error("Missing default fetch test implementation");
+      return defaultFetch(input, options);
+    });
+    render(<App />);
+    await screen.findByRole("heading", { name: "Product planning" });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Light" }));
+
+    await waitFor(() =>
+      expect(document.documentElement).toHaveAttribute("data-theme", "light"),
+    );
+    expect(localStorage.getItem("elsewise-ui-theme")).toBe("light");
+    expect(fetch).toHaveBeenCalledWith(
+      "/api/settings",
+      expect.objectContaining({
+        method: "PATCH",
+        body: JSON.stringify({ ui_theme: "light" }),
+      }),
+    );
+  });
+
   it("switches UI language without changing session language", async () => {
     render(<App />);
     await screen.findByRole("heading", { name: "Product planning" });

@@ -2,6 +2,7 @@ import queue
 import threading
 from collections import deque
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 from elsewise.external_links import load_external_links, manifest_path
@@ -16,7 +17,8 @@ from elsewise.launcher.i18n import CATALOGS, Translator
 from elsewise.launcher.overview import OverviewFrame
 from elsewise.launcher.settings_view import SettingsFrame
 from elsewise.launcher.single_instance import LauncherSingleInstance
-from elsewise.launcher.theme import TOKENS
+from elsewise.launcher.theme import THEMES, TOKENS, set_theme
+from elsewise.settings.config import SettingsStore
 from elsewise.settings.pairing import PairingManager
 
 
@@ -30,10 +32,18 @@ def test_launcher_catalogs_have_baseline_parity_and_english_fallback() -> None:
 
 
 def test_launcher_theme_contains_required_semantic_tokens() -> None:
-    assert TOKENS.canvas == "#0f0e0d"
-    assert TOKENS.accent_strong == "#d0a45e"
-    assert TOKENS.danger == "#e17c72"
-    assert TOKENS.success == "#73b184"
+    set_theme("dark")
+    assert TOKENS.canvas == "#1b2229"
+    assert TOKENS.accent == "#03b8e9"
+    assert TOKENS.accent_strong == "#17d3cf"
+    assert TOKENS.danger == "#ff858d"
+    assert TOKENS.success == "#70d89d"
+    set_theme("light")
+    assert TOKENS.canvas == "#f7fafb"
+    assert TOKENS.accent == "#038ab3"
+    assert TOKENS.accent_strong == "#09bfbd"
+    assert set(THEMES["dark"]) == set(THEMES["light"])
+    set_theme("dark")
 
 
 def test_launcher_opens_at_its_supported_minimum_size() -> None:
@@ -309,6 +319,46 @@ def test_launcher_event_drain_yields_to_tk_when_a_producer_floods() -> None:
     assert scheduled == [10]
 
 
+def test_launcher_theme_change_uses_locked_settings_file_when_server_is_stopped(
+    tmp_path: Path,
+) -> None:
+    application: Any = object.__new__(LauncherApplication)
+    application.paths = SimpleNamespace(config=tmp_path)
+    application.current_status = SimpleNamespace(state="stopped", url=None)
+
+    application._save_global_settings({"ui_theme": "light"})
+
+    assert SettingsStore(tmp_path / "settings.json").load().ui_theme == "light"
+
+
+def test_launcher_runtime_theme_update_uses_the_shared_interface_rebuild() -> None:
+    class Overview:
+        def set_runtime(self, _payload: dict[str, object]) -> None:
+            pass
+
+    application: Any = object.__new__(LauncherApplication)
+    application.event_queue = queue.SimpleQueue()
+    application.event_queue.put(
+        {
+            "kind": "runtime",
+            "payload": {"settings": {"ui_language": "en", "ui_theme": "light"}},
+        }
+    )
+    application.runtime_payload = {}
+    application.overview = Overview()
+    application.translator = Translator("en")
+    application.ui_theme = "dark"
+    applied: list[tuple[str, str]] = []
+    application._apply_interface_settings = lambda language, theme: applied.append(
+        (language, theme)
+    )
+    application.after = lambda _delay, _callback: None
+
+    application._drain_event_queue()
+
+    assert applied == [("en", "light")]
+
+
 def test_log_events_are_buffered_until_details_tab_is_built() -> None:
     application: Any = object.__new__(LauncherApplication)
     application.event_queue = queue.SimpleQueue()
@@ -360,9 +410,10 @@ def test_launcher_final_close_is_bounded_and_idempotent() -> None:
 
 
 def test_launcher_logo_uses_project_asset() -> None:
-    logo = asset_path("elsewise-logo.png")
-    assert logo is not None
-    assert "extra" not in logo.parts
+    for name in ("elsewise-logo-dark.png", "elsewise-logo-light.png"):
+        logo = asset_path(name)
+        assert logo is not None
+        assert "extra" not in logo.parts
 
 
 def test_external_link_manifest_is_shared_project_data() -> None:

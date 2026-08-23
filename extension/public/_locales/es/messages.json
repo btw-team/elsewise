@@ -1,5 +1,8 @@
 {
   "appName": { "message": "Elsewise" },
+  "theme": { "message": "Tema" },
+  "darkTheme": { "message": "Oscuro" },
+  "lightTheme": { "message": "Claro" },
   "appDescription": {
     "message": "Asistente local para subtítulos de reuniones del navegador"
   },

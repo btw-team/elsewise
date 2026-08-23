@@ -8,13 +8,34 @@
   <body>
     <main class="popup">
       <header>
-        <div>
-          <p class="eyebrow" data-i18n="appName">Elsewise</p>
-          <h1 id="platform" data-i18n="unsupportedPage">Unsupported page</h1>
-        </div>
-        <span id="daemon-badge" class="badge" data-i18n="unavailable"
-          >Unavailable</span
+        <span
+          class="popup-wordmark"
+          role="img"
+          data-i18n-aria-label="appName"
+          aria-label="Elsewise"
         >
+          <img id="brand-logo-dark" class="brand-logo brand-logo-dark" alt="" />
+          <img id="brand-logo-light" class="brand-logo brand-logo-light" alt="" />
+        </span>
+        <div class="header-controls">
+          <div class="theme-control" role="group" data-i18n-aria-label="theme">
+            <button id="theme-dark" type="button" data-i18n="darkTheme">
+              Dark
+            </button>
+            <button id="theme-light" type="button" data-i18n="lightTheme">
+              Light
+            </button>
+          </div>
+        </div>
+        <div class="provider-row">
+          <h1 id="platform" data-i18n="unsupportedPage">Unsupported page</h1>
+          <span
+            id="daemon-badge"
+            class="badge unavailable"
+            data-i18n="unavailable"
+            >Unavailable</span
+          >
+        </div>
       </header>
       <dl class="status-grid">
         <div>

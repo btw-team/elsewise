@@ -78,6 +78,7 @@ def test_runtime_status_api_and_websocket_are_bounded(tmp_path: Path) -> None:
             "agents",
         }
         assert payload["session"] is None
+        assert payload["settings"] == {"ui_language": "en", "ui_theme": "dark"}
         assert set(payload["agents"]) == {"codex", "claude"}
         assert forbidden.isdisjoint(collect_keys(payload))
 
@@ -123,6 +124,7 @@ def test_runtime_status_api_and_websocket_are_bounded(tmp_path: Path) -> None:
             assert message["type"] == "runtime.status"
             assert message["sequence"] == 1
             assert forbidden.isdisjoint(collect_keys(message["payload"]))
+            assert message["payload"]["settings"]["ui_theme"] == "dark"
 
             app.state.diagnostics.connected("ui")
             changed = websocket.receive_json()

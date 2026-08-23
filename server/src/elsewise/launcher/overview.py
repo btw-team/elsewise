@@ -275,8 +275,8 @@ class OverviewFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
             master,
             text=text,
             text_color=TOKENS.text,
-            font=ctk.CTkFont(family=self.family, size=22, weight="bold"),
-        ).grid(row=row, column=0, columnspan=columnspan, padx=28, pady=(26, 12), sticky="w")
+            font=ctk.CTkFont(family=self.family, size=26, weight="normal"),
+        ).grid(row=row, column=0, columnspan=columnspan, padx=28, pady=(22, 12), sticky="w")
 
     def _row(self, master: ctk.CTkFrame, name: str, row: int) -> ctk.CTkLabel:
         ctk.CTkLabel(

@@ -2,6 +2,9 @@ import { webExtension } from "./browser-api";
 
 const englishFallback = {
   appName: "Elsewise",
+  theme: "Theme",
+  darkTheme: "Dark",
+  lightTheme: "Light",
   unsupportedPage: "Unsupported page",
   syntheticHarness: "Synthetic harness",
   captureLabel: "Capture",
@@ -87,5 +90,11 @@ export function localizeDocument(
   for (const node of root.querySelectorAll<HTMLElement>("[data-i18n]")) {
     const key = node.dataset.i18n as MessageKey | undefined;
     if (key) node.textContent = message(key, i18n);
+  }
+  for (const node of root.querySelectorAll<HTMLElement>(
+    "[data-i18n-aria-label]",
+  )) {
+    const key = node.dataset.i18nAriaLabel as MessageKey | undefined;
+    if (key) node.setAttribute("aria-label", message(key, i18n));
   }
 }

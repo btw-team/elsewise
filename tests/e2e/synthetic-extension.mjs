@@ -10,6 +10,8 @@ import { chromium } from "playwright";
 const root = resolve(import.meta.dirname, "../..");
 const extensionPath = join(root, "extension", "dist", "chrome");
 const daemonPort = 38473;
+const captureDocumentationScreenshots =
+  process.env.ELSEWISE_E2E_SCREENSHOTS === "1";
 
 async function assertPortAvailable(port) {
   await new Promise((resolvePromise, rejectPromise) => {
@@ -247,6 +249,7 @@ try {
 
   const extensionId = new URL(worker.url()).hostname;
   const extensionPage = await context.newPage();
+  await extensionPage.setViewportSize({ width: 420, height: 720 });
   await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
   await extensionPage.evaluate(
     async ({ token, url }) => {
@@ -265,7 +268,6 @@ try {
     const state = await chrome.runtime.sendMessage({ type: "popup.status" });
     return state.daemon === "connected" && state.enabledTabId !== null;
   });
-  await extensionPage.close();
 
   await pollSnapshot((snapshot) =>
     snapshot.sources.some((source) => source.enabled),
@@ -297,6 +299,7 @@ try {
   }
 
   const gui = await context.newPage();
+  await gui.setViewportSize({ width: 1440, height: 900 });
   await gui.goto(`http://127.0.0.1:${daemonPort}/`);
   await gui.getByRole("heading", { name: "Synthetic E2E" }).waitFor();
   await gui
@@ -306,6 +309,20 @@ try {
   const summaryRun = gui.locator(".agent-run").filter({ hasText: "Summary" });
   await summaryRun.getByText("Готово", { exact: true }).waitFor();
   await summaryRun.getByText("Completed", { exact: true }).waitFor();
+  if (captureDocumentationScreenshots) {
+    await gui.screenshot({
+      path: join(root, "docs", "assets", "screenshots", "web-gui.png"),
+    });
+    await extensionPage.reload();
+    await extensionPage.waitForFunction(async () => {
+      const state = await chrome.runtime.sendMessage({ type: "popup.status" });
+      return state.daemon === "connected" && state.enabledTabId !== null;
+    });
+    await extensionPage.screenshot({
+      path: join(root, "docs", "assets", "screenshots", "extension-popup.png"),
+    });
+  }
+  await extensionPage.close();
   await gui.close();
 
   const browserSession = await context.newCDPSession(page);

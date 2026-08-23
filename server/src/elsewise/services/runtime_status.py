@@ -175,7 +175,10 @@ class RuntimeStatusService:
                 "running": run_counts.get("starting", 0) + run_counts.get("streaming", 0),
                 "draining": self.manager.draining,
             },
-            "settings": {"ui_language": configured.ui_language},
+            "settings": {
+                "ui_language": configured.ui_language,
+                "ui_theme": configured.ui_theme,
+            },
             "agents": {
                 provider_id: {
                     "id": provider_id,

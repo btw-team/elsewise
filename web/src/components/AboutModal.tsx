@@ -3,12 +3,12 @@ import { HardDrive } from "@phosphor-icons/react/HardDrive";
 import { TerminalWindow } from "@phosphor-icons/react/TerminalWindow";
 import { X } from "@phosphor-icons/react/X";
 
-import elsewiseLogoUrl from "../assets/elsewise-logo.png";
 import kofiIconUrl from "../assets/kofi-icon.png";
 import maintainerAvatarUrl from "../assets/white-bunny-avatar.png";
 import { EXTERNAL_LINKS } from "../externalLinks";
 import type { TranslationKey } from "../i18n/catalogs";
 import { ModalPortal } from "./ModalPortal";
+import { ThemeLogo } from "./ThemeLogo";
 import { useModalFocus } from "./useModalFocus";
 
 const CORE_STACK = [
@@ -54,11 +54,10 @@ export function AboutModal({
           className="dialog about-dialog"
           role="dialog"
           aria-modal="true"
-          aria-labelledby="about-dialog-title"
+          aria-label={t("aboutTitle")}
           onMouseDown={(event) => event.stopPropagation()}
         >
           <header className="dialog-heading about-heading">
-            <h2 id="about-dialog-title">{t("aboutTitle")}</h2>
             <button
               type="button"
               className="about-close"
@@ -71,12 +70,11 @@ export function AboutModal({
           </header>
 
           <div className="about-hero">
-            <img className="about-logo" src={elsewiseLogoUrl} alt="" />
-            <div>
-              <div className="about-product-line">
-                <h3>Elsewise</h3>
-                <span className="about-version">v{__APP_VERSION__}</span>
-              </div>
+            <div className="about-brand-line">
+              <ThemeLogo className="about-logo" />
+              <span className="about-version">v{__APP_VERSION__}</span>
+            </div>
+            <div className="about-hero-copy">
               <p className="about-description">{t("aboutDescription")}</p>
               <p className="about-hero-note">
                 <HardDrive aria-hidden="true" weight="regular" />
@@ -135,7 +133,7 @@ export function AboutModal({
             <p className="about-maintainer">
               <img src={maintainerAvatarUrl} alt="" />
               <span>
-                {t("aboutMaintainedBy")} <strong>BTW Team</strong>
+                {t("aboutMaintainedBy")} <strong>btw.team/tychh</strong>
               </span>
             </p>
             <a

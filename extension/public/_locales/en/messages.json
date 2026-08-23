@@ -1,5 +1,8 @@
 {
   "appName": { "message": "Elsewise" },
+  "theme": { "message": "Theme" },
+  "darkTheme": { "message": "Dark" },
+  "lightTheme": { "message": "Light" },
   "appDescription": { "message": "Local browser meeting caption companion" },
   "unsupportedPage": { "message": "Unsupported page" },
   "syntheticHarness": { "message": "Synthetic harness" },

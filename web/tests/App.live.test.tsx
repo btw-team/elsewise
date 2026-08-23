@@ -81,7 +81,7 @@ describe("App live", () => {
     const reconnect = screen.getByRole("button", {
       name: "Reload page and reconnect · Daemon: Connected",
     });
-    expect(reconnect).toHaveClass("brand-icon-frame", "online");
+    expect(reconnect).toHaveClass("brand-wordmark", "online");
     expect(reconnect).toHaveAttribute(
       "title",
       "Reload page and reconnect · Connected",

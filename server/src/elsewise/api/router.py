@@ -62,6 +62,7 @@ from elsewise.persistence.models import (
 from elsewise.services.action_presets import ActionPresetService
 from elsewise.services.buttons import ButtonService, button_payload
 from elsewise.services.errors import ServiceError
+from elsewise.services.outbox import emit_ui_event
 from elsewise.services.runtime_status import RuntimeStatusService
 from elsewise.services.sessions import SessionService, prepare_agent_cwd, session_payload
 from elsewise.services.speaker_identity import classify_speaker, own_speaker_names
@@ -78,6 +79,20 @@ def database_from_request(request: Request) -> Database:
 
 
 DatabaseDependency = Annotated[Database, Depends(database_from_request)]
+
+
+def _emit_settings_changed(request: Request, settings: dict[str, Any]) -> None:
+    database = database_from_request(request)
+    with database.transaction() as db:
+        emit_ui_event(
+            db,
+            "settings.changed",
+            None,
+            {
+                "ui_language": settings["ui_language"],
+                "ui_theme": settings["ui_theme"],
+            },
+        )
 
 
 def _require_local_origin(request: Request) -> None:
@@ -335,6 +350,7 @@ async def update_settings(body: GlobalSettingsUpdate, request: Request) -> dict[
             previous = await manager.replace_provider(provider_id, replacement)
             replaced.append((provider_id, previous))
         updated = store.update(changes).model_dump()
+        _emit_settings_changed(request, updated)
         updated["recovery"] = (
             {
                 "file_name": store.recovery_notice.file_name,
@@ -361,6 +377,7 @@ def reset_initial_prompts(request: Request) -> dict[str, Any]:
             "initial_prompt_version": current.initial_prompt_version + 1,
         }
     ).model_dump()
+    _emit_settings_changed(request, updated)
     updated["recovery"] = (
         {
             "file_name": store.recovery_notice.file_name,

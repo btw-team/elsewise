@@ -4,7 +4,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "web/src/assets/elsewise-logo.png"
+SOURCE = ROOT / "extra/elsewise-app-icon-master.png"
 OUTPUT = ROOT / "packaging/generated"
 
 

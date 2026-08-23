@@ -112,6 +112,7 @@ class GlobalSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     ui_language: SupportedLanguage = "en"
+    ui_theme: Literal["dark", "light"] = "dark"
     default_meeting_language: SupportedLanguage = "ru"
     initial_prompts: dict[str, str] = Field(default_factory=lambda: dict(DEFAULT_INITIAL_PROMPTS))
     initial_prompt_version: int = 1

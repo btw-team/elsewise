@@ -30,7 +30,7 @@ from elsewise.launcher.notifications import NativeNotifier
 from elsewise.launcher.overview import OverviewFrame
 from elsewise.launcher.settings_view import SettingsFrame
 from elsewise.launcher.single_instance import LauncherSingleInstance
-from elsewise.launcher.theme import TOKENS, font_family
+from elsewise.launcher.theme import TOKENS, UiTheme, current_theme, font_family, set_theme
 from elsewise.launcher.updates import UpdateChecker, UpdateResult
 from elsewise.runtime.controller import DaemonController, ServerStatus
 from elsewise.runtime.logging import configure_launcher_logging
@@ -55,11 +55,15 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         paths: AppPaths,
         instance: LauncherSingleInstance,
         language: str,
+        theme: UiTheme,
     ) -> None:
+        set_theme(theme)
+        ctk.set_appearance_mode(theme)
         super().__init__(fg_color=TOKENS.canvas)
         self.paths = paths
         self.instance = instance
         self.translator = Translator(language)
+        self.ui_theme: UiTheme = theme
         self.links = load_external_links()
         self.activation_queue: queue.SimpleQueue[bool] = queue.SimpleQueue()
         self.event_queue: queue.SimpleQueue[MonitorEvent] = queue.SimpleQueue()
@@ -143,20 +147,20 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
 
         brand = ctk.CTkFrame(navigation, fg_color="transparent")
         brand.grid(row=0, column=0, padx=20, pady=(22, 26), sticky="ew")
-        brand.grid_columnconfigure(1, weight=1)
-        logo = asset_path("elsewise-logo.png")
-        if logo is not None:
-            with Image.open(logo) as source:
-                prepared_logo = source.copy()
-            self._logo_image = ctk.CTkImage(prepared_logo, size=(46, 46))
+        logo_dark = asset_path("elsewise-logo-dark.png")
+        logo_light = asset_path("elsewise-logo-light.png")
+        if logo_dark is not None and logo_light is not None:
+            with Image.open(logo_dark) as source:
+                prepared_dark = source.convert("RGBA")
+            with Image.open(logo_light) as source:
+                prepared_light = source.convert("RGBA")
+            self._logo_image = ctk.CTkImage(
+                light_image=prepared_light,
+                dark_image=prepared_dark,
+                size=(166, 26),
+            )
             label = ctk.CTkLabel(brand, text="", image=self._logo_image)
-            label.grid(row=0, column=0, padx=(0, 12))
-        ctk.CTkLabel(
-            brand,
-            text=self.translator.text("app_title"),
-            text_color=TOKENS.accent_strong,
-            font=ctk.CTkFont(family=self.family, size=18, weight="bold"),
-        ).grid(row=0, column=1, sticky="w")
+            label.grid(row=0, column=0, sticky="w")
 
         for row, key in enumerate(_TAB_KEYS, start=1):
             button = ctk.CTkButton(
@@ -189,9 +193,9 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
             self._loading_frame,
             text="",
             text_color=TOKENS.text,
-            font=ctk.CTkFont(family=self.family, size=22, weight="bold"),
+            font=ctk.CTkFont(family=self.family, size=26, weight="normal"),
         )
-        self._loading_title.pack(anchor="w", padx=30, pady=(28, 8))
+        self._loading_title.pack(anchor="w", padx=30, pady=(24, 8))
         self._loading_message = ctk.CTkLabel(
             self._loading_frame,
             text=self.translator.text("placeholder"),
@@ -245,8 +249,10 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                 store=self.launcher_settings_store,
                 pairing=self.pairing_manager,
                 language=self.translator.language,
+                theme=self.ui_theme,
                 server_running=lambda: self.current_status.state == "running",
                 on_language=self._change_language,
+                on_theme=self._change_theme,
                 on_install_cli=self._install_cli if sys.platform == "darwin" else None,
                 on_remove_cli=self._remove_cli if sys.platform == "darwin" else None,
             )
@@ -319,11 +325,25 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         self._active_tab = key
         for name, button in self._tab_buttons.items():
             selected = name == key
+            light_selection = selected and current_theme() == "light"
             button.configure(
-                fg_color=TOKENS.surface_active if selected else "transparent",
-                text_color=TOKENS.accent_strong if selected else TOKENS.text_soft,
+                fg_color=(
+                    TOKENS.accent
+                    if light_selection
+                    else TOKENS.surface_active
+                    if selected
+                    else "transparent"
+                ),
+                text_color=(
+                    TOKENS.primary_text
+                    if light_selection
+                    else TOKENS.accent_strong
+                    if selected
+                    else TOKENS.text_soft
+                ),
+                hover_color=TOKENS.accent_strong if light_selection else TOKENS.surface_active,
                 border_width=1 if selected else 0,
-                border_color=TOKENS.accent_deep,
+                border_color=TOKENS.border_strong if light_selection else TOKENS.accent_deep,
             )
         frame = self._tabs.get(key)
         if frame is not None:
@@ -396,12 +416,15 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                     self.overview.set_runtime(payload)
                     shared = payload.get("settings")
                     language = shared.get("ui_language") if isinstance(shared, dict) else None
-                    if (
-                        isinstance(language, str)
-                        and language in SUPPORTED_LANGUAGE_SET
-                        and language != self.translator.language
-                    ):
-                        self._apply_language(language)
+                    theme = shared.get("ui_theme") if isinstance(shared, dict) else None
+                    next_language = (
+                        language
+                        if isinstance(language, str) and language in SUPPORTED_LANGUAGE_SET
+                        else self.translator.language
+                    )
+                    next_theme: UiTheme = "light" if theme == "light" else "dark"
+                    if next_language != self.translator.language or next_theme != self.ui_theme:
+                        self._apply_interface_settings(next_language, next_theme)
             elif kind == "log":
                 lines = event.get("lines")
                 if isinstance(lines, list) and all(isinstance(line, str) for line in lines):
@@ -662,12 +685,21 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         return self.translator.text(f"cli_{result.status}").format(path=result.destination)
 
     def _change_language(self, language: str) -> None:
+        self._save_global_settings({"ui_language": language})
+        self._apply_interface_settings(language, self.ui_theme)
+
+    def _change_theme(self, theme: str) -> None:
+        selected: UiTheme = "light" if theme == "light" else "dark"
+        self._save_global_settings({"ui_theme": selected})
+        self._apply_interface_settings(self.translator.language, selected)
+
+    def _save_global_settings(self, changes: dict[str, object]) -> None:
         saved = False
         if self.current_status.state == "running" and self.current_status.url:
             request = urllib.request.Request(
                 f"{self.current_status.url}/api/settings",
                 method="PATCH",
-                data=json.dumps({"ui_language": language}).encode(),
+                data=json.dumps(changes).encode(),
                 headers={"Content-Type": "application/json"},
             )
             try:
@@ -676,12 +708,17 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
             except (OSError, urllib.error.URLError):
                 saved = False
         if not saved:
-            SettingsStore(self.paths.config / "settings.json").update({"ui_language": language})
-        self._apply_language(language)
+            SettingsStore(self.paths.config / "settings.json").update(changes)
 
     def _apply_language(self, language: str) -> None:
+        self._apply_interface_settings(language, self.ui_theme)
+
+    def _apply_interface_settings(self, language: str, theme: UiTheme) -> None:
         active = self._active_tab
         self.translator = Translator(language)
+        self.ui_theme = theme
+        set_theme(theme)
+        ctk.set_appearance_mode(theme)
         self.title(f"{self.translator.text('app_title')} {__version__}")
         for child in self.winfo_children():
             child.destroy()
@@ -819,13 +856,21 @@ def main() -> None:
             _LOGGER.error("Another launcher instance owns the lock but cannot be activated")
         return
     settings_path = paths.config / "settings.json"
-    language = SettingsStore(settings_path).load().ui_language if settings_path.is_file() else "en"
-    ctk.set_appearance_mode("dark")
+    settings = SettingsStore(settings_path).load()
+    language = settings.ui_language
+    theme: UiTheme = settings.ui_theme
+    set_theme(theme)
+    ctk.set_appearance_mode(theme)
     shutdown_requested = threading.Event()
     application: LauncherApplication | None = None
     try:
         with shutdown_signal_handlers(lambda _signal: shutdown_requested.set()):
-            application = LauncherApplication(paths=paths, instance=instance, language=language)
+            application = LauncherApplication(
+                paths=paths,
+                instance=instance,
+                language=language,
+                theme=theme,
+            )
             instance.start_listener(application.request_activation)
             application.start_services()
             _LOGGER.info("Elsewise Launcher ready")

@@ -1,36 +1,78 @@
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, fields
+from pathlib import Path
 from tkinter import font as tkfont
-from typing import Any
+from typing import Any, Literal, cast
+
+UiTheme = Literal["dark", "light"]
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class ThemeTokens:
-    canvas: str = "#0f0e0d"
-    panel: str = "#12110f"
-    surface: str = "#191714"
-    surface_raised: str = "#211e19"
-    surface_active: str = "#2b211b"
-    border: str = "#37322b"
-    border_strong: str = "#55483a"
-    text: str = "#e7d9c7"
-    text_soft: str = "#cab8a3"
-    text_muted: str = "#9a8f83"
-    text_faint: str = "#746f67"
-    accent: str = "#b88945"
-    accent_strong: str = "#d0a45e"
-    accent_deep: str = "#695032"
-    primary: str = "#a8473f"
-    primary_fill: str = "#71302b"
-    primary_hover: str = "#873a34"
-    danger: str = "#e17c72"
-    danger_deep: str = "#441917"
-    success: str = "#73b184"
-    success_deep: str = "#243327"
-    warning: str = "#d0a45e"
-    warning_deep: str = "#332819"
+    canvas: str = ""
+    panel: str = ""
+    surface: str = ""
+    surface_raised: str = ""
+    surface_active: str = ""
+    border: str = ""
+    border_strong: str = ""
+    text: str = ""
+    text_soft: str = ""
+    text_muted: str = ""
+    text_faint: str = ""
+    accent: str = ""
+    accent_strong: str = ""
+    accent_deep: str = ""
+    primary: str = ""
+    primary_fill: str = ""
+    primary_hover: str = ""
+    primary_text: str = ""
+    on_accent: str = ""
+    danger: str = ""
+    danger_deep: str = ""
+    success: str = ""
+    success_deep: str = ""
+    warning: str = ""
+    warning_deep: str = ""
+    focus_ring: str = ""
 
 
-TOKENS = ThemeTokens()
+def _token_file() -> Path:
+    packaged = Path(__file__).resolve().parents[1] / "assets" / "theme-tokens.json"
+    if packaged.is_file():
+        return packaged
+    return Path(__file__).resolve().parents[4] / "shared" / "theme-tokens.json"
+
+
+def _load_themes() -> dict[UiTheme, dict[str, str]]:
+    payload = json.loads(_token_file().read_text(encoding="utf-8"))
+    expected = {field.name for field in fields(ThemeTokens)}
+    themes: dict[UiTheme, dict[str, str]] = {}
+    for name in ("dark", "light"):
+        values = payload.get(name)
+        if not isinstance(values, dict) or set(values) != expected:
+            raise ValueError(f"Invalid {name} launcher theme token table")
+        if not all(isinstance(value, str) for value in values.values()):
+            raise ValueError(f"Invalid {name} launcher theme token value")
+        themes[name] = cast(dict[str, str], values)
+    return themes
+
+
+THEMES = _load_themes()
+TOKENS = ThemeTokens(**THEMES["dark"])
+_current_theme: UiTheme = "dark"
+
+
+def set_theme(theme: UiTheme) -> None:
+    """Update the stable token object imported by launcher components."""
+    global _current_theme
+    for name, value in THEMES[theme].items():
+        setattr(TOKENS, name, value)
+    _current_theme = theme
+
+
+def current_theme() -> UiTheme:
+    return _current_theme
 
 
 def font_family(widget: Any) -> str:
