@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+NPM = "npm.cmd" if sys.platform == "win32" else "npm"
 
 
 def run(*command: str) -> None:
@@ -11,7 +12,7 @@ def run(*command: str) -> None:
 
 
 def main() -> None:
-    run("npm", "run", "build", "--workspace", "web")
+    run(NPM, "run", "build", "--workspace", "web")
     run(sys.executable, "scripts/prepare-packaging-assets.py")
     run(
         sys.executable,
