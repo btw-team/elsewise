@@ -27,7 +27,7 @@ OutputBaseFilename=Elsewise-{#AppVersion}-windows-x64-setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
-UninstallDisplayIcon={app}\Elsewise.exe
+UninstallDisplayIcon={app}\elsewise-gui.exe
 CloseApplications=yes
 RestartApplications=no
 SetupIconFile=..\generated\elsewise.ico
@@ -42,11 +42,11 @@ Source: "..\..\dist\frozen\Elsewise\*"; DestDir: "{app}"; Flags: ignoreversion r
 Source: "elsewise.cmd"; DestDir: "{app}\bin"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Elsewise"; Filename: "{app}\Elsewise.exe"
-Name: "{userdesktop}\Elsewise"; Filename: "{app}\Elsewise.exe"; Tasks: desktopicon
+Name: "{group}\Elsewise"; Filename: "{app}\elsewise-gui.exe"
+Name: "{userdesktop}\Elsewise"; Filename: "{app}\elsewise-gui.exe"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\Elsewise.exe"; Description: "Launch Elsewise"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\elsewise-gui.exe"; Description: "Launch Elsewise"; Flags: nowait postinstall skipifsilent
 
 [Code]
 const

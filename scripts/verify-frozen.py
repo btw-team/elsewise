@@ -22,13 +22,12 @@ def executable(name: str) -> Path:
 
 
 def gui_archive_executable() -> Path:
-    name = "Elsewise" if sys.platform in {"darwin", "win32"} else "elsewise-gui"
-    return executable(name)
+    return executable("elsewise-gui")
 
 
 def gui_smoke_executable() -> Path:
     if sys.platform == "darwin":
-        return ROOT / "dist/frozen/Elsewise.app/Contents/MacOS/Elsewise"
+        return ROOT / "dist/frozen/Elsewise.app/Contents/MacOS/elsewise-gui"
     return gui_archive_executable()
 
 

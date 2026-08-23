@@ -4,7 +4,7 @@ from elsewise.launcher.macos_cli import MacCliManager, app_bundle_for
 
 
 def make_bundle(tmp_path: Path) -> tuple[Path, Path]:
-    executable = tmp_path / "Applications/Elsewise.app/Contents/MacOS/Elsewise"
+    executable = tmp_path / "Applications/Elsewise.app/Contents/MacOS/elsewise-gui"
     cli = executable.with_name("elsewise")
     executable.parent.mkdir(parents=True)
     executable.write_text("gui", encoding="utf-8")
