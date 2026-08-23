@@ -5,7 +5,7 @@ from typing import Any, TypedDict
 
 import pytest
 from elsewise.protocol.models import parse_protocol_message
-from elsewise.protocol.schemas import protocol_root, validate_schema
+from elsewise.protocol.schemas import protocol_root, schema_root, validate_schema
 from elsewise.settings.limits import MAX_CAPTION_TEXT_LENGTH
 from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import ValidationError as PydanticValidationError
@@ -49,6 +49,7 @@ def test_caption_text_hard_limit() -> None:
 
 def test_protocol_root_is_repository_protocol_directory() -> None:
     assert protocol_root() == Path(__file__).resolve().parents[2] / "protocol"
+    assert schema_root() == protocol_root() / "schemas"
 
 
 def test_every_rest_error_code_is_registered_in_the_shared_catalog() -> None:

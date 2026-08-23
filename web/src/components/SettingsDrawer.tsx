@@ -53,6 +53,41 @@ const emptyPairing: PairingSettings = {
   generation: 0,
 };
 
+async function writeClipboard(text: string): Promise<void> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+  } catch {
+    // Some browsers expose the Clipboard API on loopback pages but still
+    // reject it because of focus or permission policy. Fall back to the
+    // synchronous selection-based copy below.
+  }
+
+  const previousFocus = document.activeElement;
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.readOnly = true;
+  textarea.setAttribute("aria-hidden", "true");
+  Object.assign(textarea.style, {
+    position: "fixed",
+    inset: "0 auto auto -9999px",
+    opacity: "0",
+    pointerEvents: "none",
+  });
+  document.body.append(textarea);
+  textarea.focus();
+  textarea.select();
+  textarea.setSelectionRange(0, text.length);
+  try {
+    if (!document.execCommand("copy")) throw new Error("Clipboard copy failed");
+  } finally {
+    textarea.remove();
+    if (previousFocus instanceof HTMLElement) previousFocus.focus();
+  }
+}
+
 function ContextStrategyOptions({ t }: { t: Translator }) {
   return (
     <>
@@ -136,7 +171,7 @@ export function SettingsDrawer({
 
   async function copyPairingToken() {
     try {
-      await navigator.clipboard.writeText(pairing.token);
+      await writeClipboard(pairing.token);
       onSuccess(t("pairingCopied"));
     } catch {
       onError(t("requestFailed"));
