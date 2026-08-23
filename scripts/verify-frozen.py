@@ -21,9 +21,15 @@ def executable(name: str) -> Path:
     return BUNDLE / f"{name}{suffix}"
 
 
-def gui_executable() -> Path:
+def gui_archive_executable() -> Path:
     name = "Elsewise" if sys.platform in {"darwin", "win32"} else "elsewise-gui"
     return executable(name)
+
+
+def gui_smoke_executable() -> Path:
+    if sys.platform == "darwin":
+        return ROOT / "dist/frozen/Elsewise.app/Contents/MacOS/Elsewise"
+    return gui_archive_executable()
 
 
 def isolated_environment(root: Path) -> dict[str, str]:
@@ -49,7 +55,8 @@ def verify_gui_archive(gui: Path) -> None:
 
 def smoke_gui(gui: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="elsewise-frozen-gui-smoke-") as temporary:
-        environment = isolated_environment(Path(temporary))
+        root = Path(temporary)
+        environment = isolated_environment(root)
         environment["ELSEWISE_FROZEN_GUI_SMOKE_TEST"] = "1"
         command = [str(gui)]
         if sys.platform.startswith("linux") and not environment.get("DISPLAY"):
@@ -57,7 +64,22 @@ def smoke_gui(gui: Path) -> None:
             if xvfb_run is None:
                 raise RuntimeError("xvfb-run is required to smoke-test the frozen GUI")
             command = [xvfb_run, "-a", *command]
-        subprocess.run(command, env=environment, check=True, timeout=30)
+        result = subprocess.run(
+            command,
+            env=environment,
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        )
+        if result.returncode:
+            log_path = root / "logs/launcher.log"
+            launcher_log = log_path.read_text(encoding="utf-8") if log_path.is_file() else ""
+            raise RuntimeError(
+                "Frozen GUI smoke test failed with exit code "
+                f"{result.returncode}.\nstdout:\n{result.stdout}\n"
+                f"stderr:\n{result.stderr}\nlauncher.log:\n{launcher_log}"
+            )
 
 
 def wait_for_health(timeout: float = 20.0) -> dict[str, object]:
@@ -81,10 +103,12 @@ def ensure_port_available() -> None:
 
 def main() -> None:
     cli = executable("elsewise")
-    gui = gui_executable()
+    gui_archive = gui_archive_executable()
+    gui_smoke = gui_smoke_executable()
     required = (
         cli,
-        gui,
+        gui_archive,
+        gui_smoke,
         executable("elsewise-server"),
         BUNDLE / "_internal/elsewise/web_dist/index.html",
         BUNDLE / "_internal/elsewise/migrations/versions/0001_initial.py",
@@ -100,8 +124,8 @@ def main() -> None:
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError(f"Frozen bundle is missing required files: {missing}")
-    verify_gui_archive(gui)
-    smoke_gui(gui)
+    verify_gui_archive(gui_archive)
+    smoke_gui(gui_smoke)
     ensure_port_available()
 
     with tempfile.TemporaryDirectory(prefix="elsewise-frozen-smoke-") as temporary:
