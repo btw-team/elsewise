@@ -35,7 +35,3 @@ output/playwright/
 
 # Local project notes
 notes/
-!notes/
-notes/*
-!notes/unsolved.md
-!notes/ideas.md
