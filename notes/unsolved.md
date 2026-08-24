@@ -35,10 +35,11 @@ Teams и Zoom были исправлены; базовый реальный с�
 - Большая часть [platform validation matrix](../docs/testing/platform-validation-matrix.md)
   остаётся в состоянии `NOT RUN`. Есть частичный Linux frozen CLI smoke от 2026-08-19,
   пользовательский source-run smoke на Pop!_OS 22.04/macOS и изолированные Linux
-  source checks lifecycle/locking/signals от 2026-08-21. Они подтверждают основные
-  GUI, server, browser capture, Codex и process-control flows в исходном окружении, но
-  не установочные пакеты и platform-native release cases.
-- До публичного релиза нужно проверить реальные артефакты на Windows x64, macOS
+  source checks lifecycle/locking/signals от 2026-08-21, а также пользовательская
+  проверка Linux DEB `v0.1.2` от 2026-08-24: установленное приложение запускается,
+  соединяется с расширением и работает. Полные platform-native release cases,
+  включая весь install/update/uninstall matrix, пока не выполнены.
+- Для полной проверки релиза нужно проверить реальные артефакты на Windows x64, macOS
   Apple Silicon/Intel и Linux: process lifecycle, locks, high DPI, native dialogs,
   notifications, log rotation, install/update/uninstall и браузерную интеграцию.
 - Для Windows необходимо явно зафиксировать поддерживаемые версии ОС. Для macOS нужно
