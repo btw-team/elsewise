@@ -80,16 +80,16 @@ platform-specific case is marked not applicable outside its platform.
 | MAC-01     | DMG installation                          | ➖ N/A     | ➖ N/A     | ⬜ NOT RUN |
 | MAC-02     | Install command-line tool action          | ➖ N/A     | ➖ N/A     | ⬜ NOT RUN |
 | MAC-03     | App and helper lifetime                   | ➖ N/A     | ➖ N/A     | ⬜ NOT RUN |
-| LINUX-01   | Ubuntu 22.04 `.deb`                       | ⬜ NOT RUN | ➖ N/A     | ➖ N/A     |
+| LINUX-01   | Ubuntu 22.04 `.deb`                       | ⚠️ PARTIAL | ➖ N/A     | ➖ N/A     |
 | LINUX-02   | RPM                                       | ⬜ NOT RUN | ➖ N/A     | ➖ N/A     |
 | LINUX-03   | AppImage                                  | ⬜ NOT RUN | ➖ N/A     | ➖ N/A     |
-| BROWSER-01 | Browser integration smoke                 | ⬜ NOT RUN | ⬜ NOT RUN | ⬜ NOT RUN |
+| BROWSER-01 | Browser integration smoke                 | ⚠️ PARTIAL | ⬜ NOT RUN | ⬜ NOT RUN |
 
 ## Target platforms
 
 | Platform  | Initial baseline                                           | Required artifacts                        | Current status              |
 | --------- | ---------------------------------------------------------- | ----------------------------------------- | --------------------------- |
-| Linux     | Ubuntu 22.04 x86_64; X11 and Wayland                       | `.deb`, AppImage                          | NOT RUN                     |
+| Linux     | Ubuntu 22.04 x86_64; X11 and Wayland                       | `.deb`, AppImage                          | PARTIAL                     |
 | RPM Linux | Fedora/RHEL-compatible baseline to be fixed before release | `.rpm`, AppImage where applicable         | BLOCKED: baseline selection |
 | Windows   | x64 Windows versions declared supported for the release    | per-user installer and installed `onedir` | NOT RUN                     |
 | macOS     | Each architecture for which an artifact is published       | unsigned `.dmg` containing `.app`         | NOT RUN                     |
@@ -470,9 +470,11 @@ Append one row per test case and environment. Use an immutable CI URL, issue,
 screenshot path, or bounded log excerpt where possible. For a retest, add a new
 row rather than editing the failed row.
 
-| Date       | Test ID | Version / commit                       | Artifact and SHA-256                                                                                    | Environment                                          | Result     | Tester | Evidence / notes                                                                                                  |
-| ---------- | ------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | ---------- | ------ | ----------------------------------------------------------------------------------------------------------------- |
-| YYYY-MM-DD | TEST-ID | `vX.Y.Z` or commit                     | artifact name and SHA-256                                                                               | OS, version, architecture, native/VM, display server | ⬜ NOT RUN | name   | CI URL, issue, screenshot, or bounded notes                                                                       |
+| Date       | Test ID    | Version / commit   | Artifact and SHA-256                              | Environment                                                  | Result     | Tester | Evidence / notes                                                                                                                                           |
+| ---------- | ---------- | ------------------ | ------------------------------------------------- | ------------------------------------------------------------ | ---------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| YYYY-MM-DD | TEST-ID    | `vX.Y.Z` or commit | artifact name and SHA-256                         | OS, version, architecture, native/VM, display server         | ⬜ NOT RUN | name   | CI URL, issue, screenshot, or bounded notes                                                                                                                |
+| 2026-08-24 | LINUX-01   | `v0.1.2`           | `elsewise_0.1.2_amd64.deb`; checksum not recorded | Linux, x86_64, native; distribution and session not recorded | ⚠️ PARTIAL | tychh  | Installed DEB launched successfully; launcher started the server and the application operated normally. Full Ubuntu/X11/Wayland install suite was not run. |
+| 2026-08-24 | BROWSER-01 | `v0.1.2`           | `elsewise_0.1.2_amd64.deb`; checksum not recorded | Linux, x86_64, native; browser version not recorded          | ⚠️ PARTIAL | tychh  | Installed build connected successfully to the extension and the tested flow worked. Full Chrome/Firefox and locale matrix was not run.                     |
 
 ## Active release waivers
 
