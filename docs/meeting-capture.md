@@ -9,6 +9,21 @@
 Elsewise does not access microphone audio. It observes the caption DOM already
 rendered by the meeting platform, so captions must be enabled in the meeting itself.
 
+## Caption quality
+
+Elsewise receives the captions produced by each platform, so recognition,
+punctuation, speaker separation, and utterance boundaries vary with the platform,
+language, audio, and meeting conditions. Agent output can only be as reliable as
+that source context allows.
+
+In current hands-on testing, Google Meet has generally produced the strongest
+recognition and speaker separation. Microsoft Teams Web has been usable but less
+consistent. Zoom Web has often produced fragmented or inaccurate utterances,
+particularly outside English, requiring the agent to reconstruct more of the
+conversation and reducing answer reliability. These observations are not fixed
+guarantees: the platforms can change their caption systems independently of
+Elsewise.
+
 ## Capture lifecycle
 
 Only one Elsewise session records at a time. A session may start before an
