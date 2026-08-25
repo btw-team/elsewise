@@ -3,7 +3,8 @@
 Elsewise is a real-time AI advisor for live conversations. Its browser extension
 follows captions already displayed by supported call platforms, while the local
 desktop application, server, and web GUI turn that context into role-specific,
-editable AI-assisted workflows.
+editable AI-assisted workflows. The context stays current continuously, while AI
+assistance runs only when the user triggers an action or free prompt.
 
 This documentation covers the free and open-source edition published in the
 [`btw-team/elsewise`](https://github.com/btw-team/elsewise) repository.

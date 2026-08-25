@@ -1,5 +1,14 @@
 # Getting started
 
+## Product surfaces
+
+| Desktop launcher                                                | Browser extension                                                                               |
+| --------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| ![Elsewise launcher overview](assets/screenshots/launcher.webp) | ![Elsewise extension connected to a live conversation](assets/screenshots/extension-popup.webp) |
+
+The launcher manages the local server. The browser extension connects live
+captions to Elsewise and opens the same web GUI in a tab or side panel.
+
 ## 1. Start the server
 
 Open the Elsewise launcher. The server starts automatically by default. The

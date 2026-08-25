@@ -7,6 +7,10 @@
 
 **A real-time AI advisor for live conversations.**
 
+Elsewise keeps up with the conversation and gives you the kind of help you need
+in the moment: from recalling information or structuring an answer to spotting
+risks, objections, gaps, or the next question to ask.
+
 Elsewise follows captions already displayed by Google Meet, Microsoft Teams, or
 Zoom Web and gives you context-aware help while the conversation is happening. It
 keeps the live transcript and session history on your computer and works with the
@@ -35,8 +39,9 @@ A short walkthrough showing several live-conversation workflows is coming soon.
 - **Built around your role.** An interview candidate, salesperson, language learner,
   negotiator, and technical lead need different help from the same conversation.
   Presets make that behavior explicit.
-- **Context on demand.** Each action selects a bounded, relevant part of the
-  transcript instead of blindly sending the entire conversation to the agent.
+- **Continuous context, on-demand AI.** Elsewise follows the conversation as it
+  unfolds but calls the agent only when you trigger an action or free prompt. Each
+  request receives a bounded, relevant part of the transcript.
 - **Yours to adapt.** Actions, prompts, and presets are editable, so one engine can
   support workflows that are specific to your profession, team, or interests.
 
@@ -45,15 +50,16 @@ A short walkthrough showing several live-conversation workflows is coming soon.
 
 ## What can it help with?
 
-| Situation                       | What Elsewise can do                                                                                                            |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| **Work meetings**               | Catch you up, summarize decisions, surface risks, and extract next steps                                                        |
-| **Employment interviews**       | Help structure a truthful answer, recall relevant experience or technical concepts, and identify what the interviewer is asking |
-| **Sales calls**                 | Suggest follow-up questions and surface objections, qualification gaps, and commitments                                         |
-| **Language practice**           | Give hints, recall words and grammar, and help you continue without simply answering for you                                    |
-| **Negotiations**                | Track interests, constraints, leverage, concessions, and possible responses                                                     |
-| **Journalism and interviewing** | Detect unanswered points, contradictions, and promising threads; suggest the next question                                      |
-| **Technical discussions**       | Recall context, compare approaches, and surface trade-offs and failure modes                                                    |
+| Situation                       | What Elsewise can do                                                                                                    |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| **Employment interviews**       | Help structure an answer, recall relevant experience or technical concepts, and identify what the interviewer is asking |
+| **Language practice**           | Give hints, recall words and grammar, and help you continue without simply answering for you                            |
+| **Personal conversations**      | Read conversational signals cautiously, recall context, and consider low-pressure ways to respond                       |
+| **Sales calls**                 | Suggest follow-up questions and surface objections, qualification gaps, and commitments                                 |
+| **Technical discussions**       | Recall context, compare approaches, and surface trade-offs and failure modes                                            |
+| **Negotiations**                | Track interests, constraints, leverage, concessions, and possible responses                                             |
+| **Journalism and interviewing** | Detect unanswered points, contradictions, and promising threads; suggest the next question                              |
+| **Work meetings**               | Catch you up, summarize decisions, surface risks, and extract next steps                                                |
 
 These are examples, not fixed product modes. Elsewise can be reshaped through its
 preset and action model without changing the application itself.
@@ -61,8 +67,8 @@ preset and action model without changing the application itself.
 ## Presets change how Elsewise helps
 
 A preset defines the kind of assistance you want during a conversation and exposes
-a small set of purpose-built actions. Each action combines a button label, prompt,
-context strategy, and hard context limit.
+a small set of purpose-built actions. Each action is a one-click request with its
+own prompt and precisely controlled conversation context.
 
 For example:
 
@@ -72,6 +78,13 @@ For example:
 - **Negotiation Coach** offers _Interests_, _My leverage_, _Counteroffer_, and
   _Conceding?_.
 - **Interviewer** offers _Follow up_, _Go deeper_, _Mismatch?_, and _Next question_.
+
+The same moment in a conversation can therefore invite very different assistance:
+an interviewee may choose _My answer_, an interviewer _Go deeper_, a language
+learner _Hint_, and a negotiator _My leverage_.
+
+> **No prompt engineering in the middle of a conversation.** Configure the workflow
+> once, then use short, focused actions when you need them.
 
 Built-in presets provide useful starting points. You can edit their actions or
 create a focused workflow of your own in the web GUI. See
@@ -85,6 +98,9 @@ create a focused workflow of your own in the web GUI. See
 2. The local Elsewise server maintains the live transcript and conversation state.
 3. When you trigger an action or free prompt, Elsewise sends the selected context
    and instruction to your configured Codex or Claude Code CLI.
+
+Caption capture keeps the local context current, but no AI request is made until
+you explicitly ask for help.
 
 ```mermaid
 flowchart LR
@@ -117,15 +133,6 @@ The [installation guide](docs/installation.md) covers platform packages and unsi
 preview warnings. [Getting started](docs/getting-started.md) walks through pairing,
 capture, sessions, and the first action.
 
-## Product surfaces
-
-| Desktop launcher                                                     | Browser extension                                                                                    |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| ![Elsewise launcher overview](docs/assets/screenshots/launcher.webp) | ![Elsewise extension connected to a live conversation](docs/assets/screenshots/extension-popup.webp) |
-
-The launcher manages the local server. The browser extension connects live captions
-to Elsewise and opens the same web GUI in a tab or side panel.
-
 ## Local-first OSS architecture
 
 - Elsewise itself has no hosted application backend.
@@ -138,11 +145,28 @@ to Elsewise and opens the same web GUI in a tab or side panel.
 Read [Privacy and local data](docs/privacy-and-data.md) before using Elsewise with
 sensitive or regulated conversations, and always follow participant-consent rules.
 
+## Current alpha limitations
+
+- Elsewise captures captions rendered by the meeting platform; it does not
+  transcribe microphone or system audio itself.
+- Capture currently supports Google Meet, Microsoft Teams Web, and Zoom Web.
+- AI assistance currently requires an installed and authenticated Codex or Claude
+  Code CLI.
+- Caption adapters depend on browser UI that meeting platforms can change without
+  notice. Such changes can temporarily break capture.
+- Caption quality is platform-dependent. In current testing it has been strongest
+  on Meet, usable but less consistent on Teams, and substantially less reliable on
+  Zoom, especially outside English. See [Meeting capture](docs/meeting-capture.md).
+- Presets stay local to one Elsewise installation; built-in community sharing and
+  discovery are not available yet.
+
 ## Who is this for?
 
-The open-source edition is currently aimed primarily at technical users who are
-comfortable running local tools and agent CLIs. It is intentionally hackable:
-prompts, actions, and presets are meant to be inspected and changed.
+The current OSS release is aimed primarily at technical users who are comfortable
+installing local software and agent CLIs. Once configured, Elsewise itself is
+designed to be used through presets and one-click actions during ordinary
+conversations. It is intentionally hackable: prompts, actions, and presets are
+meant to be inspected and changed.
 
 ## Build your own Elsewise
 
@@ -157,15 +181,26 @@ windows that role needs.
 ## Origin story
 
 I started building Elsewise for my own employment interviews. The hard part was not
-always knowing the answer. It was understanding a question under pressure, finding
-the relevant experience or technical concept within seconds, and turning it into a
-clear, truthful response while the conversation kept moving.
+usually that I had never learned the material. After years of hands-on software
+work, it was still difficult to understand a question under pressure, retrieve the
+right piece of practical experience or technical knowledge within seconds, and
+turn it into a clear response while the conversation kept moving.
 
 I realized that this problem was not unique to interviews. A salesperson,
 interviewer, language learner, negotiator, and engineer each need a different kind
 of help in the moment, but the underlying capture, context, and agent infrastructure
 can be the same. Elsewise grew from that insight: one real-time advisor whose
 behavior changes with your role and intent.
+
+## Product direction
+
+Elsewise is alpha software and these directions do not carry release dates, but the
+current architecture is intended to grow toward:
+
+- system-audio capture and a local speech-to-caption/utterance pipeline;
+- more local agents, model providers, and execution backends;
+- easier preset sharing and community-built conversational workflows;
+- broader capture sources and conversation environments beyond browser meetings.
 
 ## Documentation
 
