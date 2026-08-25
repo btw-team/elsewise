@@ -2,7 +2,8 @@
 
 Packaged releases include the launcher, local server, web GUI, and extension
 archives. Python and Node.js are not required on the target computer. Codex and
-Claude Code remain optional external tools.
+Claude Code are external tools: at least one is required for AI assistance, while
+caption capture, transcript history, and export work without one.
 
 ## Unsigned preview builds
 
@@ -44,8 +45,8 @@ FUSE execution is unavailable.
 
 ## Browser extensions
 
-Until public store listings are available, releases include Chrome and Firefox ZIP
-archives. Extract the archive before loading it:
+Until public store listings are available, releases include ZIP archives for Chrome
+116+ and Firefox 140+. Extract the matching archive before loading it:
 
 - Chrome: `chrome://extensions` → Developer mode → Load unpacked.
 - Firefox: `about:debugging#/runtime/this-firefox` → Load Temporary Add-on → choose
