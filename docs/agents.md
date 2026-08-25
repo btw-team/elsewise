@@ -32,6 +32,12 @@ relevant text documentation and configuration in the working directory. It must 
 scan dependencies, binaries, large directories, or potential secrets, and may not
 change files during warm-up.
 
+The directory can provide session-specific background such as information about
+the user, project, other participants, reference documents, terminology, goals, and
+constraints. Keep it focused and free of credentials or unrelated sensitive data.
+The agent is instructed to treat anything it reads as context rather than as
+unconditionally trusted instructions.
+
 Elsewise validates and resolves the requested directory. A missing directory can
 be created only after explicit confirmation. An absent or unusable optional path
 falls back to a safe empty runtime directory, visibly marked in the Agent header.
