@@ -181,18 +181,24 @@ windows that role needs.
 ## Origin story
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 I started building Elsewise for my own employment interviews. The hard part was not
 usually that I had never learned the material. After years of hands-on software
 work, it was still difficult to understand a question under pressure, retrieve the
 right piece of practical experience or technical knowledge within seconds, and
 turn it into a clear response while the conversation kept moving.
 =======
+=======
+>>>>>>> Stashed changes
 I started building Elsewise for my own employment interviews. I completed my formal
 computer science education more than fifteen years ago, and although I have gained
 extensive hands-on development experience since then, I cannot always recall and
 articulate the right answer within seconds. This is especially true for newer
 technologies that I learned through practice rather than formal study, and the
 pressure of a live interview makes that recall even harder.
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 
 I realized that this problem was not unique to interviews. A salesperson,
