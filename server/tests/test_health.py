@@ -1,3 +1,4 @@
+import mimetypes
 from pathlib import Path
 
 import pytest
@@ -67,3 +68,28 @@ def test_spa_fallback_does_not_hide_unknown_api_routes(
     assert api_response.json() == {"error": {"code": "not_found", "message": "Not Found"}}
     assert page_response.status_code == 200
     assert '<div id="root"></div>' in page_response.text
+
+
+def test_javascript_assets_use_browser_compatible_media_type(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    web_dist = tmp_path / "web"
+    assets = web_dist / "assets"
+    assets.mkdir(parents=True)
+    (web_dist / "index.html").write_text(
+        '<script type="module" src="/assets/app.js"></script>', encoding="utf-8"
+    )
+    (assets / "app.js").write_text("export const ready = true;", encoding="utf-8")
+    monkeypatch.setenv("ELSEWISE_WEB_DIST", str(web_dist))
+    monkeypatch.setitem(mimetypes.types_map, ".js", "text/plain")
+    application = create_app(
+        database_url="sqlite://",
+        pairing_path=tmp_path / "pairing.json",
+        settings_path=tmp_path / "settings.json",
+    )
+
+    with TestClient(application, base_url="http://127.0.0.1:38473") as client:
+        response = client.get("/assets/app.js")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/javascript")
