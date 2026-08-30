@@ -1,6 +1,7 @@
 import asyncio
 import hmac
 import ipaddress
+import mimetypes
 import os
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
@@ -33,6 +34,13 @@ from elsewise.services.sessions import recover_after_restart
 from elsewise.settings.config import SettingsStore
 from elsewise.settings.pairing import PairingManager
 from elsewise.settings.paths import AppPaths
+
+
+def _register_web_asset_media_types() -> None:
+    # On Windows, mimetypes incorporates registry entries and may map JavaScript
+    # files to text/plain. Browsers refuse to execute ES modules served that way.
+    mimetypes.add_type("text/javascript", ".js", strict=True)
+    mimetypes.add_type("text/javascript", ".mjs", strict=True)
 
 
 def create_app(
@@ -230,6 +238,7 @@ def create_app(
     if web_dist.is_dir() and (web_dist / "index.html").is_file():
         assets = web_dist / "assets"
         if assets.is_dir():
+            _register_web_asset_media_types()
             application.mount("/assets", StaticFiles(directory=assets), name="web-assets")
 
         @application.get("/{spa_path:path}", include_in_schema=False)
