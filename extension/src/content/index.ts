@@ -8,12 +8,20 @@ const extensionVersion = __EXTENSION_VERSION__;
 
 let port: chrome.runtime.Port;
 let adapter: PlatformAdapter | null = null;
+let activeSourceEpochId: string | null = null;
+const producerEpochId = crypto.randomUUID();
+let lastDiscoveredActivity = "";
 
-function meetingKey(): string {
-  return (
-    location.pathname.split("/").filter(Boolean).slice(0, 2).join("/") ||
-    location.hostname
+async function activityKey(): Promise<string> {
+  const evidence = `${platform()}:${location.pathname}`;
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(evidence),
   );
+  return [...new Uint8Array(digest)]
+    .slice(0, 16)
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function createAdapter(): PlatformAdapter | null {
@@ -42,8 +50,31 @@ function platform(): string {
   return "unsupported";
 }
 
-function enableCapture(): void {
-  adapter?.stop();
+async function announceDiscovery(force = false): Promise<void> {
+  const activity = `${platform()}:${location.pathname}`;
+  if (!force && activity === lastDiscoveredActivity) return;
+  lastDiscoveredActivity = activity;
+  const key = await activityKey();
+  const supported = createAdapter() !== null;
+  port.postMessage({
+    type: "adapter.discovered",
+    producerEpochId,
+    platform: platform(),
+    activityKey: key,
+    supported,
+  });
+}
+
+function startSource(commandId: string, sourceEpochId: string): void {
+  if (adapter && activeSourceEpochId === sourceEpochId) {
+    port.postMessage({
+      type: "adapter.command_ack",
+      commandId,
+      result: "started",
+    });
+    return;
+  }
+  adapter?.stop(false);
   adapter = createAdapter();
   if (!adapter) {
     port.postMessage({
@@ -52,10 +83,17 @@ function enableCapture(): void {
       captionsStatus: "unavailable",
       speakerDetection: "unknown",
       confidence: 0,
-      meetingKey: meetingKey(),
     });
+    port.postMessage({
+      type: "adapter.command_ack",
+      commandId,
+      result: "failed",
+      errorCode: "unsupported_source",
+    });
+    activeSourceEpochId = null;
     return;
   }
+  activeSourceEpochId = sourceEpochId;
   adapter.start(
     (event) =>
       port.postMessage({
@@ -66,30 +104,52 @@ function enableCapture(): void {
         speaker: event.speaker,
         text: event.text,
         observedAt: event.observedAt,
-        meetingKey: meetingKey(),
       }),
     (status) =>
       port.postMessage({
         type: "adapter.status",
         ...status,
-        meetingKey: meetingKey(),
       }),
   );
+  port.postMessage({
+    type: "adapter.command_ack",
+    commandId,
+    result: "started",
+  });
+}
+
+function stopSource(commandId: string, sourceEpochId: string): void {
+  if (activeSourceEpochId !== sourceEpochId) {
+    port.postMessage({
+      type: "adapter.command_ack",
+      commandId,
+      result: "finalized",
+    });
+    return;
+  }
+  adapter?.stop(true);
+  adapter = null;
+  activeSourceEpochId = null;
+  port.postMessage({
+    type: "adapter.command_ack",
+    commandId,
+    result: "finalized",
+  });
 }
 
 function connect(): void {
   port = chrome.runtime.connect({ name: "elsewise-content" });
   port.onDisconnect.addListener(() => {
-    adapter?.stop();
+    adapter?.stop(false);
     adapter = null;
+    activeSourceEpochId = null;
     window.setTimeout(connect, 500);
   });
   port.onMessage.addListener((message: Record<string, unknown>) => {
-    if (message.type === "capture.enable") enableCapture();
-    if (message.type === "capture.disable") {
-      adapter?.stop();
-      adapter = null;
-    }
+    if (message.type === "source.start")
+      startSource(String(message.commandId), String(message.sourceEpochId));
+    if (message.type === "source.stop")
+      stopSource(String(message.commandId), String(message.sourceEpochId));
     if (message.type === "diagnostics.dump") {
       const bundle = adapter?.dumpDiagnostics({
         redactText: message.redactText !== false,
@@ -110,6 +170,8 @@ function connect(): void {
       });
     }
   });
+  void announceDiscovery(true);
 }
 
 connect();
+window.setInterval(() => void announceDiscovery(), 1_000);

@@ -62,28 +62,24 @@ in its independent `browser.storage.local` namespace.
 
 ## Extension pairing
 
-The server and launcher share `PairingManager` over `pairing.json` in the resolved
-per-user config directory. Both call `ensure()` at startup, so the first component
-to run creates the credential and subsequent starts reuse it. Writes are atomic,
-owner-only on POSIX platforms, and coordinated between processes by a file lock.
+Pairing is DB-backed and scoped to a browser installation. A short-lived,
+nonce-bound WebSocket carries request status and delivers a per-client credential
+exactly once after approval. Only its digest is persisted.
 
 The local pairing API is:
 
 | Method | Path                                  | Behavior |
 | ------ | ------------------------------------- | -------- |
-| `GET`  | `/api/extension/pairing`              | Returns the current token and metadata for local Settings. |
-| `PUT`  | `/api/extension/pairing`              | Trims and saves a manually supplied 16–4096 character token. |
-| `POST` | `/api/extension/pairing/regenerate`   | Generates, saves, and returns a random replacement token. |
+| `GET` | `/api/pairing/requests` | Lists pending requests. |
+| `POST` | `/api/pairing/requests/{id}/approve` | Approves one request. |
+| `POST` | `/api/pairing/requests/{id}/deny` | Denies one request. |
+| `GET` | `/api/paired-clients` | Lists paired browsers. |
+| `PATCH` | `/api/paired-clients/{id}` | Renames one client. |
+| `DELETE` | `/api/paired-clients/{id}` | Revokes one client. |
 
-The extension keeps the token in local browser storage and sends it in the initial
-`client.hello` frame to `ws://127.0.0.1:38473/ws/ingest`. The server first validates
-the extension origin and then compares the credential in constant time. Each token
-change increments its generation; an established ingest connection is rejected as
-soon as it sends another frame under an older generation. Saving the unchanged token
-does not increment the generation.
-
-The pairing credential is distinct from the runtime control token and is never sent
-in a URL or emitted to logs.
+The extension keeps its credential in local browser storage and sends it only in the
+initial protocol-v2 `client.hello`. Revocation closes that client's sockets without
+affecting other paired browsers.
 
 ## Agent threads
 

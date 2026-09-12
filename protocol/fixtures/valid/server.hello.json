@@ -1,0 +1,11 @@
+{
+  "type": "server.hello",
+  "protocol_version": 2,
+  "capabilities": [
+    "pairing_requests",
+    "daemon_source_control",
+    "normalized_evidence"
+  ],
+  "heartbeat_interval_seconds": 10,
+  "session": null
+}

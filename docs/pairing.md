@@ -1,57 +1,32 @@
 # Browser extension pairing
 
-Elsewise uses one local pairing token to authorize caption ingestion from the
-Chrome and Firefox extensions. The web GUI and desktop launcher display and manage
-the same token.
+Elsewise pairs each browser installation independently. No credential is displayed
+or copied by the user.
 
-## Initial pairing
+## Pair a browser
 
-The server and launcher each check for a pairing token at startup. If the token file
-does not exist or is damaged, Elsewise generates and saves a new token. Starting
-either component first is sufficient; later starts reuse the saved value.
+1. Start the Elsewise server.
+2. Open the extension popup and select **Pair**.
+3. Open **Settings → Browser extension pairing** in the web GUI or desktop
+   launcher.
+4. Review the bounded browser name and family, then select **Allow** or **Deny**.
+5. After approval, the extension stores its per-client credential in local browser
+   storage and connects automatically.
 
-To pair an extension:
+The request expires after two minutes. **Cancel** withdraws a pending request. A
+normal daemon or browser restart does not require pairing again.
 
-1. Open **Settings** in the web GUI or desktop launcher.
-2. Find **Browser extension pairing**.
-3. Select **Copy token**.
-4. Open the Elsewise extension popup in the browser.
-5. Paste the value into **Pairing token** and save it.
+## Manage paired browsers
 
-The extension stores the credential in its local browser storage. It sends the token
-only in the first message of the local ingest WebSocket connection and never places
-it in a URL. A successful connection changes the extension daemon status to
-**Connected**.
+The web GUI and launcher list paired clients without exposing credentials. Revoke a
+client to close only that browser's active sockets and reject later reconnects.
+Rename is available through the web GUI. Pairing the same installation again rotates
+that client's credential.
 
-## Change the token
+The server stores only a SHA-256 digest of each secret. Plaintext is delivered once
+over the nonce-bound pairing WebSocket to the requester and must not appear in logs,
+diagnostics, URLs, UI snapshots, or API responses. This credential is distinct from
+the short-lived runtime control credential used by the launcher.
 
-Both Settings screens provide the same actions:
-
-- **Copy token** copies the value currently shown in the field.
-- **Regenerate** creates a random token, immediately replaces the saved value, and
-  updates the field.
-- **Save** trims and saves a manually entered token containing 16 to 4096 characters.
-
-After editing the field manually, select **Save** before copying it to an extension.
-Saving the unchanged token is a no-op. Saving a different token or selecting
-**Regenerate** immediately invalidates the previous credential and disconnects
-extensions that still use it. Copy the new value into every extension installation
-that should reconnect.
-
-The token persists across normal server and launcher restarts, so routine
-regeneration is unnecessary.
-
-## Local storage and security
-
-The token is stored in `pairing.json` in the OS-native per-user Elsewise config
-directory. The credential file is written atomically with owner-only permissions on
-platforms that support POSIX modes. Server and launcher writers coordinate through a
-local file lock.
-
-Treat the token as a local credential: do not include it in logs, screenshots,
-diagnostic bundles, issue reports, or shared shell output. The pairing token is
-separate from the private runtime control token used by the launcher to manage the
-server.
-
-See [Troubleshooting](troubleshooting.md#extension-is-not-paired) if the extension
-does not connect after saving the token.
+See [Troubleshooting](troubleshooting.md#extension-is-not-paired) if approval does
+not complete.

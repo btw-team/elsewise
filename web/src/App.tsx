@@ -123,9 +123,10 @@ function statusLabel(
   session: SessionSummary,
   t: (key: TranslationKey) => string,
 ): string {
+  if (session.recording_status === "starting") return t("starting");
+  if (session.recording_status === "stopping") return t("stopping");
   if (session.recording_status === "running") return t("recording");
-  if (session.recording_status === "stopped") return t("stopped");
-  return t("idle");
+  return t("stopped");
 }
 
 function Transcript({
@@ -289,7 +290,7 @@ function Transcript({
                     {utterance.speaker ?? t("unknownSpeaker")}
                   </strong>
                   <time>
-                    {formatTime(utterance.last_observed_at, language)}
+                    {formatTime(utterance.last_received_at, language)}
                   </time>
                 </div>
                 <div className="utterance-body">
@@ -332,9 +333,9 @@ function SystemHealth({
 }) {
   const daemonStatus = connected ? "ready" : "unavailable";
   const sourceStatus =
-    source?.captions_status === "error"
+    source?.health_status === "error"
       ? "error"
-      : source?.captions_status === "unavailable"
+      : !source?.available
         ? "unavailable"
         : source?.connected
           ? "ready"
@@ -354,7 +355,7 @@ function SystemHealth({
         <dt>{t("source")}</dt>
         <dd>
           <span className={`health-dot ${sourceStatus}`} />
-          {source?.captions_status ?? t("waiting")}
+          {source?.health_status ?? t("waiting")}
         </dd>
       </div>
       <div title={health?.message ?? undefined}>
@@ -495,14 +496,19 @@ export function App() {
         : [];
     return [...items].sort(
       (left, right) =>
-        left.first_observed_at.localeCompare(right.first_observed_at) ||
+        left.first_session_offset_us - right.first_session_offset_us ||
         left.first_client_seq - right.first_client_seq ||
         left.id.localeCompare(right.id),
     );
   }, [detail, selected]);
   const selectedDetail = detail?.session.id === selected?.id ? detail : null;
   const segments = selectedDetail?.segments ?? [];
-  const enabledSource = snapshot.sources.find((source) => source.enabled);
+  const selectedSource = snapshot.sources.find(
+    (source) => source.id === selected?.selected_source_id,
+  );
+  const availableSources = snapshot.sources.filter(
+    (source) => source.available && source.connected,
+  );
   const agentRuns = selectedDetail?.agent_history.runs ?? [];
   const agentMessages = selectedDetail?.agent_history.messages ?? [];
   const defaultActionPreset = snapshot.action_presets.find(
@@ -617,6 +623,9 @@ export function App() {
     updateTranscriptWidth(clientX - sidebar.getBoundingClientRect().right);
   }
 
+  const transitionPending =
+    selected?.recording_status === "starting" ||
+    selected?.recording_status === "stopping";
   const transitionAction =
     selected?.recording_status === "running"
       ? "stop"
@@ -629,13 +638,18 @@ export function App() {
       : transitionAction === "restart"
         ? t("restartSession")
         : t("startSession");
-  const sourcePlatform = enabledSource?.platform.replaceAll("_", " ");
-  const sourceName =
-    enabledSource?.connected && sourcePlatform
-      ? `${sourcePlatform[0]?.toUpperCase() ?? ""}${sourcePlatform.slice(1)}`
-      : t("waiting");
-  const sourceDetail = enabledSource?.connected
-    ? enabledSource.captions_status
+  const sourceLabel = (source: CaptureSource) => {
+    const client = source.client_display_name ?? "Browser extension";
+    const browser = source.browser_family ?? "browser";
+    const platform = source.platform.replaceAll("_", " ");
+    const ordinal = source.tab_ordinal ?? availableSources.indexOf(source) + 1;
+    return `${client} · ${browser} · ${platform} · #${ordinal}`;
+  };
+  const sourceName = selectedSource?.connected
+    ? sourceLabel(selectedSource)
+    : t("waiting");
+  const sourceDetail = selectedSource?.connected
+    ? selectedSource.health_status
     : t("waitingHint");
   const layoutStyle = {
     "--transcript-width":
@@ -693,7 +707,7 @@ export function App() {
         </button>
         <SystemHealth
           connected={connected}
-          source={enabledSource}
+          source={selectedSource}
           health={agentHealth}
           t={t}
         />
@@ -744,7 +758,7 @@ export function App() {
           <button
             className={`session-transition ${transitionAction === "stop" ? "danger" : "primary"}`}
             title={transitionLabel}
-            disabled={!selected}
+            disabled={!selected || transitionPending}
             onClick={() => void transition(transitionAction)}
           >
             {transitionAction === "stop" ? (
@@ -812,6 +826,31 @@ export function App() {
               <strong>{sourceName}</strong>
               <span>({sourceDetail})</span>
             </span>
+            {selected?.recording_status === "running" &&
+              availableSources.length > 1 && (
+                <select
+                  aria-label={t("source")}
+                  value={selected.selected_source_id ?? ""}
+                  onChange={(event) => {
+                    if (!selected || !event.target.value) return;
+                    void api
+                      .selectSource(selected.id, event.target.value)
+                      .then(() => refresh())
+                      .catch((caught: unknown) =>
+                        setActionError(apiErrorMessage(caught, t)),
+                      );
+                  }}
+                >
+                  <option value="" disabled>
+                    {t("waiting")}
+                  </option>
+                  {availableSources.map((source) => (
+                    <option key={source.id} value={source.id}>
+                      {sourceLabel(source)}
+                    </option>
+                  ))}
+                </select>
+              )}
           </div>
           <span className="utterance-count">
             {utterances.length} {t("utterancesCount")}

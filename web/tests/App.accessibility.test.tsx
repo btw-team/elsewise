@@ -67,7 +67,7 @@ describe("App accessibility", () => {
 
   it("confirms expanded agent permissions with an in-app dialog", async () => {
     const created = structuredClone(snapshot.sessions[0]!);
-    created.recording_status = "idle";
+    created.recording_status = "stopped";
     created.agent_status = "not_started";
     vi.mocked(fetch).mockImplementation(async (input, options) => {
       const path = String(input);

@@ -10,12 +10,16 @@ from elsewise.persistence.models import (
     AgentMessageRecord,
     AgentRunRecord,
     AgentThreadRecord,
+    CaptureSourceRecord,
+    PairedClientRecord,
+    RecordingSegmentRecord,
+    SourceEpochRecord,
     UtteranceRecord,
 )
-from elsewise.protocol.models import SourceStatus, UtteranceUpsert
-from elsewise.services.capture import CaptureService
+from elsewise.protocol.models import CaptionUpsert
 from elsewise.services.sessions import SessionService
 from elsewise.settings.paths import AppPaths
+from elsewise.sources.projectors.captions import CaptionProjector
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -29,39 +33,52 @@ def test_markdown_export_is_deterministic_partial_safe_and_excludes_frozen_conte
     database.create_schema()
     sessions = SessionService(database)
     session = sessions.create(title="<Unsafe & title>", description="Description", language="en")
-    capture = CaptureService(database)
-    source = SourceStatus.model_validate(
-        {
-            "type": "source.status",
-            "protocol_version": 1,
-            "event_id": str(uuid4()),
-            "source_id": "source",
-            "client_seq": 1,
-            "platform": "google_meet",
-            "enabled": True,
-            "captions_status": "capturing",
-            "speaker_detection": "available",
-            "meeting_key": "meeting",
-            "observed_at": NOW.isoformat(),
-        }
-    )
-    capture.update_source(source, installation_id=str(uuid4()))
     sessions.start(session.id, now=NOW)
-    capture.process_caption(
-        UtteranceUpsert.model_validate(
+    with database.transaction() as db:
+        segment = db.scalar(select(RecordingSegmentRecord))
+        assert segment is not None
+        client = PairedClientRecord(
+            installation_id=str(uuid4()),
+            browser_family="chrome",
+            display_name="Test Chrome",
+            credential_digest="0" * 64,
+        )
+        db.add(client)
+        db.flush()
+        source = CaptureSourceRecord(
+            paired_client_id=client.id,
+            platform="google_meet",
+            driver_id="google_meet_captions",
+            driver_version="2.0.0",
+            tab_instance_id="tab-1",
+            capabilities=["captions"],
+        )
+        db.add(source)
+        db.flush()
+        epoch = SourceEpochRecord(
+            source_id=source.id,
+            session_id=session.id,
+            segment_id=segment.id,
+            producer_epoch_id="producer-1",
+            state="running",
+        )
+        db.add(epoch)
+        db.flush()
+        source_id, epoch_id = source.id, epoch.id
+    CaptionProjector(database).process(
+        CaptionUpsert.model_validate(
             {
-                "type": "utterance.upsert",
-                "protocol_version": 1,
+                "type": "caption.upsert",
+                "protocol_version": 2,
                 "event_id": str(uuid4()),
-                "source_id": "source",
+                "source_id": source_id,
+                "source_epoch_id": epoch_id,
                 "client_seq": 2,
-                "platform": "google_meet",
-                "meeting_key": "meeting",
                 "utterance_id": "u-1",
                 "revision": 1,
                 "speaker": "Speaker <A>",
                 "text": '<img src=x onerror="alert(1)"> text',
-                "observed_at": NOW.isoformat(),
+                "session_offset_us": 1_000,
             }
         )
     )
@@ -161,7 +178,6 @@ def test_export_api_and_permanent_delete_remove_only_selected_exports(tmp_path: 
     )
     app = create_app(
         database_url=f"sqlite:///{paths.database}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(),
         app_paths=paths,

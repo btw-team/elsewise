@@ -1,0 +1,51 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/server.hello.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "heartbeat_interval_seconds": {
+      "maximum": 300,
+      "minimum": 1,
+      "title": "Heartbeat Interval Seconds",
+      "type": "integer"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "session": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session"
+    },
+    "type": {
+      "const": "server.hello",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "protocol_version",
+    "capabilities",
+    "heartbeat_interval_seconds"
+  ],
+  "title": "ServerHello",
+  "type": "object"
+}

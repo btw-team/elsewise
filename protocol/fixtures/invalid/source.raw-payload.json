@@ -1,0 +1,14 @@
+{
+  "type": "source.discovered",
+  "protocol_version": 2,
+  "event_id": "22222222-2222-4222-8222-222222222222",
+  "client_seq": 1,
+  "tab_instance_id": "tab-lifetime-1",
+  "producer_epoch_id": "document-1",
+  "platform": "google_meet",
+  "driver_version": "0.2.0",
+  "capabilities": ["captions"],
+  "health_status": "waiting",
+  "observed_at": "2026-09-12T12:00:00Z",
+  "raw_url": "https://meet.google.com/secret"
+}

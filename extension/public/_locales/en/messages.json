@@ -6,7 +6,7 @@
   "appDescription": { "message": "Local browser meeting caption companion" },
   "unsupportedPage": { "message": "Unsupported page" },
   "syntheticHarness": { "message": "Synthetic harness" },
-  "captureLabel": { "message": "Capture" },
+  "sourceLabel": { "message": "Source" },
   "captionsLabel": { "message": "Captions" },
   "speakerLabel": { "message": "Speaker" },
   "bufferLabel": { "message": "Buffer" },
@@ -31,35 +31,31 @@
   "unavailable": { "message": "unavailable" },
   "idle": { "message": "idle" },
   "running": { "message": "running" },
+  "stopping": { "message": "stopping" },
   "stopped": { "message": "stopped" },
+  "degraded": { "message": "degraded" },
   "captionsOffStatus": { "message": "Off" },
   "captionsOnEmptyStatus": { "message": "Enabled, no speech" },
   "captionsCapturingStatus": { "message": "Capturing" },
   "speakerAvailable": { "message": "Available" },
-  "enableCapture": { "message": "Enable capture" },
-  "disableCapture": { "message": "Disable capture" },
-  "hintCaptionsOff": {
-    "message": "Captions are off. Enable them manually inside the meeting."
-  },
-  "hintCaptionsEmpty": {
-    "message": "Captions are enabled; no speech is visible yet."
-  },
-  "hintCapture": {
-    "message": "Capture uses the caption panel you enable inside the meeting."
+  "sourceActive": { "message": "Active" },
+  "sourceWaiting": { "message": "Waiting for Session selection" },
+  "hintSourceManaged": {
+    "message": "Elsewise starts this source automatically for the active Session."
   },
   "hintUnsupported": {
     "message": "Open Google Meet, Microsoft Teams, or Zoom to begin."
   },
   "openSidePanel": { "message": "Open side panel" },
   "openNewTab": { "message": "Open in new tab" },
-  "pairingToken": { "message": "Pairing token" },
-  "save": { "message": "Save" },
+  "pair": { "message": "Pair" },
+  "cancel": { "message": "Cancel" },
+  "pairingRequired": { "message": "Pairing required" },
+  "pairingPending": { "message": "Waiting for approval in Elsewise…" },
+  "pairingPaired": { "message": "Paired with Elsewise" },
   "debug": { "message": "Debug" },
   "dumpCaptionDom": { "message": "Dump caption DOM" },
   "copyDiagnostics": { "message": "Copy diagnostics" },
-  "sourceSwitchRejected": {
-    "message": "Stop recording before switching source."
-  },
   "diagnosticRequested": {
     "message": "A redacted diagnostic download was requested."
   },
@@ -69,7 +65,6 @@
   },
   "sidePanelUnavailable": { "message": "Unable to open the side panel." },
   "guiUnavailable": { "message": "Unable to open Elsewise." },
-  "pairingSaved": { "message": "Pairing token saved locally." },
   "connectingServer": { "message": "Connecting to Elsewise…" },
   "startServer": { "message": "Start the Elsewise server" },
   "retry": { "message": "Retry" }

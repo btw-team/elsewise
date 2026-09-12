@@ -22,6 +22,7 @@ from elsewise.agents.queue import AgentQueueManager
 from elsewise.agents.registry import AgentProviderRegistry
 from elsewise.api import router
 from elsewise.api.ingest import ingest_websocket
+from elsewise.api.pairing import pairing_websocket
 from elsewise.api.router import ui_websocket
 from elsewise.api.runtime import runtime_websocket
 from elsewise.api.security import safe_http_request
@@ -29,11 +30,15 @@ from elsewise.observability import RuntimeDiagnostics
 from elsewise.persistence.database import Database
 from elsewise.services.errors import ServiceError
 from elsewise.services.maintenance import mark_sources_disconnected, perform_startup_maintenance
+from elsewise.services.pairing import PairingService
 from elsewise.services.runtime_status import RuntimeStatusService
+from elsewise.services.session_controller import SessionController
 from elsewise.services.sessions import recover_after_restart
+from elsewise.services.transitions import TransitionExecutor
 from elsewise.settings.config import SettingsStore
-from elsewise.settings.pairing import PairingManager
 from elsewise.settings.paths import AppPaths
+from elsewise.sources.connections import BrowserConnectionRegistry
+from elsewise.sources.manager import SourceManager
 
 
 def _register_web_asset_media_types() -> None:
@@ -46,7 +51,6 @@ def _register_web_asset_media_types() -> None:
 def create_app(
     *,
     database_url: str | None = None,
-    pairing_path: Path | None = None,
     settings_path: Path | None = None,
     agent_provider: AgentProvider | AgentProviderRegistry | None = None,
     app_paths: AppPaths | None = None,
@@ -54,11 +58,7 @@ def create_app(
     paths = app_paths or AppPaths.resolve(ensure_exists=database_url is None)
     resolved_url = database_url or os.environ.get("ELSEWISE_DATABASE_URL")
     database = Database(resolved_url) if resolved_url else Database.from_path(paths.database)
-    configured_pairing = os.environ.get("ELSEWISE_PAIRING_PATH")
-    pairing = PairingManager(
-        pairing_path
-        or (Path(configured_pairing) if configured_pairing else paths.config / "pairing.json")
-    )
+    pairing = PairingService(database)
     settings = SettingsStore(settings_path or paths.config / "settings.json")
     provider = agent_provider
     if provider is None:
@@ -79,11 +79,15 @@ def create_app(
         database, diagnostics, agent_queue, settings, paths
     )
     session_cleanup_tasks: set[asyncio.Task[None]] = set()
+    browser_connections = BrowserConnectionRegistry()
+    source_manager = SourceManager(database, browser_connections)
+    transition_executor = TransitionExecutor()
+    session_controller = SessionController(database, source_manager, transition_executor)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         database.migrate()
-        pairing.ensure()
+        pairing.expire_pending()
         recover_after_restart(database)
         mark_sources_disconnected(database)
         perform_startup_maintenance(database)
@@ -99,9 +103,12 @@ def create_app(
                 await runtime_status_service.stop()
             finally:
                 try:
-                    await agent_queue.stop()
+                    await session_controller.close()
                 finally:
-                    database.dispose()
+                    try:
+                        await agent_queue.stop()
+                    finally:
+                        database.dispose()
 
     application = FastAPI(title="Elsewise", version=__version__, lifespan=lifespan)
     application.state.database = database
@@ -112,6 +119,9 @@ def create_app(
     application.state.diagnostics = diagnostics
     application.state.runtime_status = runtime_status_service
     application.state.session_cleanup_tasks = session_cleanup_tasks
+    application.state.browser_connections = browser_connections
+    application.state.source_manager = source_manager
+    application.state.session_controller = session_controller
     application.state.request_shutdown = None
 
     def valid_control_request(request: Request) -> bool:
@@ -224,6 +234,10 @@ def create_app(
     @application.websocket("/ws/ingest")
     async def ingest_route(websocket: WebSocket) -> None:
         await ingest_websocket(websocket)
+
+    @application.websocket("/ws/pairing")
+    async def pairing_route(websocket: WebSocket) -> None:
+        await pairing_websocket(websocket)
 
     @application.websocket("/ws/runtime")
     async def runtime_websocket_route(websocket: WebSocket) -> None:

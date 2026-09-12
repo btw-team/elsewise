@@ -1,0 +1,12 @@
+{
+  "type": "source.health",
+  "protocol_version": 2,
+  "event_id": "33333333-3333-4333-8333-333333333333",
+  "client_seq": 2,
+  "source_id": "44444444-4444-4444-8444-444444444444",
+  "source_epoch_id": "55555555-5555-4555-8555-555555555555",
+  "health_status": "degraded",
+  "error_code": "captions_delayed",
+  "dropped_event_count": 1,
+  "observed_at": "2026-09-12T12:00:01Z"
+}

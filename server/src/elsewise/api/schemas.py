@@ -120,7 +120,13 @@ class GlobalSettingsUpdate(BaseModel):
     default_allow_network: bool | None = None
 
 
-class PairingTokenUpdate(BaseModel):
+class PairedClientRename(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
-    token: str = Field(min_length=16, max_length=4096)
+    display_name: str = Field(min_length=1, max_length=128)
+
+
+class SourceSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    source_id: str = Field(min_length=36, max_length=36)

@@ -1,0 +1,13 @@
+{
+  "type": "caption.finalize",
+  "protocol_version": 2,
+  "event_id": "66666666-6666-4666-8666-666666666666",
+  "source_id": "44444444-4444-4444-8444-444444444444",
+  "source_epoch_id": "55555555-5555-4555-8555-555555555555",
+  "client_seq": 3,
+  "utterance_id": "caption-1",
+  "revision": 2,
+  "speaker": "Speaker A",
+  "text": "Normalized caption complete",
+  "session_offset_us": 1200000
+}

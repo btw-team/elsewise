@@ -1,7 +1,10 @@
 import type {
-  SourceStatus,
-  UtteranceFinalize,
-  UtteranceUpsert,
+  CaptionFinalize,
+  CaptionUpsert,
+  SourceCommand,
+  SourceCommandAck,
+  SourceDiscovered,
+  SourceHealth,
 } from "../protocol/models";
 import { PersistentEventBuffer } from "./event-buffer";
 import { backgroundApi } from "./browser-api";
@@ -10,13 +13,25 @@ import { BrowserStorageArea } from "./storage";
 import { IngestTransport, type TransportState } from "./transport";
 
 const extensionVersion = __EXTENSION_VERSION__;
+const COORDINATOR_KEY = "sourceCoordinatorV2";
+
+interface SourceRuntime {
+  tabId: number;
+  tabInstanceId: string;
+  producerEpochId: string;
+  platform: SourceDiscovered["platform"];
+  activityKey?: string;
+  health: SourceDiscovered["health_status"];
+  speaker: string;
+  sourceId?: string;
+  sourceEpochId?: string;
+  sessionId?: string;
+  lastEventAt?: string;
+}
 
 interface PopupStatus extends TransportState {
-  enabledTabId: number | null;
-  platform: string;
-  captions: string;
-  speaker: string;
-  lastEventAt: string | null;
+  pairing: "unpaired" | "pending" | "paired" | "denied" | "expired" | "error";
+  sources: SourceRuntime[];
 }
 
 const ports = new Map<
@@ -24,7 +39,8 @@ const ports = new Map<
   Map<number, ReturnType<typeof backgroundApi.runtime.connect>>
 >();
 const frameElection = new FrameElection();
-let enabledTabId: number | null = null;
+const sources = new Map<number, SourceRuntime>();
+const discoveryRequests = new Map<string, number>();
 let transport: IngestTransport | null = null;
 let transportState: TransportState = {
   daemon: "unavailable",
@@ -35,23 +51,11 @@ let transportState: TransportState = {
   bufferFull: false,
   session: null,
 };
-let captureState = {
-  platform: "unsupported",
-  captions: "unknown",
-  speaker: "unknown",
-};
-let lastEventAt: string | null = null;
+let pairingState: PopupStatus["pairing"] = "unpaired";
+let pairingSocket: WebSocket | null = null;
 let clientSequence = 0;
 let installationId = "";
-let activeSourceId: string | null = null;
-let activeDocumentId: string | null = null;
 let adapterMessageQueue: Promise<void> = Promise.resolve();
-const COORDINATOR_KEY = "coordinatorStateV1";
-const sourceStatusTabs = new Map<
-  string,
-  { requestedTabId: number; previousTabId: number | null }
->();
-let pendingPreviousTabId: number | null = null;
 
 function messageRecord(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === "object"
@@ -66,31 +70,25 @@ function queueAdapterMessage(operation: () => Promise<void>): void {
   });
 }
 
-function postToTab(tabId: number, message: Record<string, unknown>): void {
-  for (const port of ports.get(tabId)?.values() ?? [])
-    port.postMessage(message);
-}
-
 function postToCaptureFrame(
   tabId: number,
   message: Record<string, unknown>,
-): void {
+): boolean {
   const tabPorts = ports.get(tabId);
-  if (!tabPorts) return;
+  if (!tabPorts) return false;
   const elected = frameElection.frameFor(tabId);
   const port = elected === undefined ? tabPorts.get(0) : tabPorts.get(elected);
-  (port ?? tabPorts.values().next().value)?.postMessage(message);
+  const target = port ?? tabPorts.values().next().value;
+  if (!target) return false;
+  target.postMessage(message);
+  return true;
 }
 
 async function persistCoordinator(): Promise<void> {
   await backgroundApi.storage.session.set({
     [COORDINATOR_KEY]: {
-      enabledTabId,
       clientSequence,
-      captureState,
-      lastEventAt,
-      activeSourceId,
-      activeDocumentId,
+      sources: [...sources.values()],
     },
   });
 }
@@ -98,25 +96,9 @@ async function persistCoordinator(): Promise<void> {
 async function restoreCoordinator(): Promise<void> {
   const stored = await backgroundApi.storage.session.get(COORDINATOR_KEY);
   const state = stored[COORDINATOR_KEY] as
-    | {
-        enabledTabId?: number | null;
-        clientSequence?: number;
-        captureState?: typeof captureState;
-        lastEventAt?: string | null;
-        activeSourceId?: string | null;
-        activeDocumentId?: string | null;
-      }
-    | undefined;
-  enabledTabId = state?.enabledTabId ?? null;
+    { clientSequence?: number; sources?: SourceRuntime[] } | undefined;
   clientSequence = state?.clientSequence ?? 0;
-  captureState = state?.captureState ?? captureState;
-  lastEventAt = state?.lastEventAt ?? null;
-  activeSourceId = state?.activeSourceId ?? null;
-  activeDocumentId = state?.activeDocumentId ?? null;
-}
-
-function sourceId(tabId: number, documentId: string): string {
-  return `${installationId}:${tabId}:${documentId}`.slice(0, 256);
+  for (const source of state?.sources ?? []) sources.set(source.tabId, source);
 }
 
 async function ensureInstallationId(): Promise<string> {
@@ -130,41 +112,49 @@ async function ensureInstallationId(): Promise<string> {
 async function startTransport(): Promise<void> {
   transport?.stop();
   installationId = await ensureInstallationId();
-  const stored = await backgroundApi.storage.local.get("pairingToken");
-  const token =
-    typeof stored.pairingToken === "string" ? stored.pairingToken : "";
+  const stored = await backgroundApi.storage.local.get("clientCredential");
+  const credential =
+    typeof stored.clientCredential === "string" ? stored.clientCredential : "";
+  pairingState = credential ? "paired" : "unpaired";
   transport = new IngestTransport(
     new PersistentEventBuffer(
       new BrowserStorageArea(backgroundApi.storage.session),
     ),
-    token,
+    credential,
     installationId,
     extensionVersion,
     undefined,
     undefined,
     (state) => {
       transportState = state;
+      if (state.daemon === "not_paired" && pairingState === "paired") {
+        pairingState = "unpaired";
+        void backgroundApi.storage.local.remove("clientCredential");
+      }
     },
     (ack) => {
-      const pending = sourceStatusTabs.get(ack.event_id);
-      sourceStatusTabs.delete(ack.event_id);
-      if (!pending) return;
-      if (
-        ack.result === "rejected" &&
-        ack.reason === "source_switch_rejected"
-      ) {
-        postToTab(pending.requestedTabId, { type: "capture.disable" });
-        enabledTabId = pending.previousTabId;
-        if (enabledTabId !== null)
-          postToTab(enabledTabId, { type: "capture.enable" });
-      } else if (
-        pending.previousTabId !== null &&
-        pending.previousTabId !== pending.requestedTabId
-      ) {
-        postToTab(pending.previousTabId, { type: "capture.disable" });
-        frameElection.clear(pending.previousTabId);
+      const tabId = discoveryRequests.get(ack.event_id);
+      if (tabId === undefined) return;
+      discoveryRequests.delete(ack.event_id);
+      const source = sources.get(tabId);
+      if (!source) return;
+      if (typeof ack.details?.source_id === "string") {
+        source.sourceId = ack.details.source_id;
+      }
+      if ("source_epoch_id" in (ack.details ?? {})) {
+        if (typeof ack.details?.source_epoch_id === "string") {
+          source.sourceEpochId = ack.details.source_epoch_id;
+        } else {
+          source.sourceEpochId = undefined;
+          source.sessionId = undefined;
+        }
       }
       void persistCoordinator();
+    },
+    (command) => handleSourceCommand(command),
+    undefined,
+    async () => {
+      for (const source of sources.values()) await announceSource(source);
     },
   );
   transport.start();
@@ -173,33 +163,129 @@ async function startTransport(): Promise<void> {
 function status(): PopupStatus {
   return {
     ...transportState,
-    enabledTabId,
-    platform: captureState.platform,
-    captions: captureState.captions,
-    speaker: captureState.speaker,
-    lastEventAt,
+    pairing: pairingState,
+    sources: [...sources.values()],
   };
 }
 
-function platformFromUrl(rawUrl?: string): string {
-  if (!rawUrl) return "unsupported";
-  const url = new URL(rawUrl);
-  if (url.hostname === "meet.google.com") return "google_meet";
-  if (
-    url.hostname === "teams.live.com" ||
-    url.hostname === "teams.microsoft.com" ||
-    url.hostname.endsWith(".teams.microsoft.com")
-  ) {
-    return "microsoft_teams";
+async function beginPairing(): Promise<void> {
+  pairingSocket?.close();
+  pairingState = "pending";
+  installationId = await ensureInstallationId();
+  const nonce = `${crypto.randomUUID()}${crypto.randomUUID()}`;
+  const socket = new WebSocket("ws://127.0.0.1:38473/ws/pairing");
+  pairingSocket = socket;
+  socket.onopen = () => {
+    socket.send(
+      JSON.stringify({
+        type: "pairing.request",
+        protocol_version: 2,
+        nonce,
+        installation_id: installationId,
+        browser_family: navigator.userAgent.includes("Firefox")
+          ? "firefox"
+          : "chrome",
+        display_name: navigator.userAgent.includes("Firefox")
+          ? "Firefox extension"
+          : "Chrome extension",
+        extension_version: extensionVersion,
+      }),
+    );
+  };
+  socket.onmessage = (event) => {
+    const message = messageRecord(JSON.parse(String(event.data)));
+    if (
+      message.type === "pairing.approved" &&
+      typeof message.credential === "string"
+    ) {
+      void backgroundApi.storage.local
+        .set({ clientCredential: message.credential })
+        .then(startTransport);
+      pairingState = "paired";
+      socket.close();
+    } else if (message.type === "pairing.denied") {
+      pairingState = "denied";
+      socket.close();
+    } else if (message.type === "pairing.expired") {
+      pairingState = "expired";
+      socket.close();
+    } else if (message.type === "pairing.cancelled") {
+      pairingState = "unpaired";
+      socket.close();
+    } else if (message.type === "pairing.error") {
+      pairingState = "error";
+      socket.close();
+    }
+  };
+  socket.onerror = () => {
+    pairingState = "error";
+  };
+  socket.onclose = () => {
+    if (pairingSocket === socket) pairingSocket = null;
+  };
+}
+
+function cancelPairing(): void {
+  pairingSocket?.send(
+    JSON.stringify({ type: "pairing.cancel", protocol_version: 2 }),
+  );
+  pairingState = "unpaired";
+}
+
+function handleSourceCommand(command: SourceCommand): void {
+  const source = [...sources.values()].find(
+    (candidate) => candidate.tabInstanceId === command.tab_instance_id,
+  );
+  if (!source) {
+    sendCommandAck(command, "failed", "producer_disconnected");
+    return;
   }
-  if (url.hostname === "app.zoom.us") return "zoom";
-  if (
-    url.hostname === "127.0.0.1" &&
-    url.searchParams.has("elsewise-synthetic")
-  ) {
-    return "synthetic";
-  }
-  return "unsupported";
+  source.sourceId = command.source_id;
+  source.sourceEpochId = command.source_epoch_id;
+  source.sessionId = command.session_id;
+  const sent = postToCaptureFrame(source.tabId, {
+    type: command.type,
+    commandId: command.command_id,
+    sourceId: command.source_id,
+    sourceEpochId: command.source_epoch_id,
+  });
+  if (!sent) sendCommandAck(command, "failed", "producer_disconnected");
+  void persistCoordinator();
+}
+
+function sendCommandAck(
+  command: SourceCommand,
+  result: SourceCommandAck["result"],
+  errorCode?: string,
+): void {
+  transport?.sendControl({
+    type: "source.command_ack",
+    protocol_version: 2,
+    command_id: command.command_id,
+    source_id: command.source_id,
+    source_epoch_id: command.source_epoch_id,
+    result,
+    ...(errorCode ? { error_code: errorCode } : {}),
+  });
+}
+
+async function reportSourceUnavailable(source: SourceRuntime): Promise<void> {
+  if (!transport || !source.sourceId) return;
+  source.health = "unavailable";
+  source.lastEventAt = new Date().toISOString();
+  clientSequence += 1;
+  await transport.enqueue({
+    type: "source.health",
+    protocol_version: 2,
+    event_id: crypto.randomUUID(),
+    client_seq: clientSequence,
+    source_id: source.sourceId,
+    source_epoch_id: source.sourceEpochId,
+    health_status: "unavailable",
+    error_code: "producer_disconnected",
+    dropped_event_count: transportState.dropped,
+    observed_at: source.lastEventAt,
+  });
 }
 
 const initialization = (async () => {
@@ -212,9 +298,6 @@ backgroundApi.runtime.onConnect.addListener((port) => {
     return;
   const tabId = port.sender.tab.id;
   const frameId = port.sender.frameId ?? 0;
-  const documentId =
-    (port.sender as typeof port.sender & { documentId?: string }).documentId ??
-    `frame-${frameId}`;
   const tabPorts =
     ports.get(tabId) ??
     new Map<number, ReturnType<typeof backgroundApi.runtime.connect>>();
@@ -223,34 +306,90 @@ backgroundApi.runtime.onConnect.addListener((port) => {
   port.onDisconnect.addListener(() => {
     if (ports.get(tabId)?.get(frameId) === port)
       ports.get(tabId)?.delete(frameId);
-    if (ports.get(tabId)?.size === 0) ports.delete(tabId);
+    if (ports.get(tabId)?.size === 0) {
+      ports.delete(tabId);
+      const source = sources.get(tabId);
+      if (source) void reportSourceUnavailable(source);
+    }
     frameElection.disconnected(tabId, frameId);
   });
   port.onMessage.addListener((rawMessage) => {
     const message = messageRecord(rawMessage);
-    if (message.type === "adapter.status")
-      queueAdapterMessage(() =>
-        handleAdapterStatus(tabId, frameId, documentId, message),
-      );
-    if (message.type === "adapter.utterance")
-      queueAdapterMessage(() =>
-        handleUtterance(tabId, frameId, documentId, message),
-      );
-    if (message.type === "diagnostics.bundle")
+    if (message.type === "adapter.discovered") {
+      queueAdapterMessage(() => handleDiscovery(tabId, frameId, message));
+    } else if (message.type === "adapter.status") {
+      queueAdapterMessage(() => handleAdapterStatus(tabId, frameId, message));
+    } else if (message.type === "adapter.utterance") {
+      queueAdapterMessage(() => handleUtterance(tabId, frameId, message));
+    } else if (message.type === "adapter.command_ack") {
+      queueAdapterMessage(() => handleAdapterCommandAck(tabId, message));
+    } else if (message.type === "diagnostics.bundle") {
       void downloadDiagnostic(message.bundle);
-  });
-  void initialization.then(() => {
-    if (enabledTabId === tabId) port.postMessage({ type: "capture.enable" });
+    }
   });
 });
+
+async function handleDiscovery(
+  tabId: number,
+  frameId: number,
+  message: Record<string, unknown>,
+): Promise<void> {
+  if (frameId !== 0 && sources.has(tabId)) return;
+  const current = sources.get(tabId);
+  const source: SourceRuntime = {
+    tabId,
+    tabInstanceId: current?.tabInstanceId ?? crypto.randomUUID(),
+    producerEpochId: String(message.producerEpochId),
+    platform: message.platform as SourceRuntime["platform"],
+    activityKey:
+      typeof message.activityKey === "string" ? message.activityKey : undefined,
+    health: message.supported === false ? "unavailable" : "waiting",
+    speaker: "unknown",
+    lastEventAt: new Date().toISOString(),
+  };
+  sources.set(tabId, source);
+  await persistCoordinator();
+  await announceSource(source);
+}
+
+async function announceSource(source: SourceRuntime): Promise<void> {
+  if (!transport || transport.state().daemon !== "connected") return;
+  const observedAt = source.lastEventAt ?? new Date().toISOString();
+  clientSequence += 1;
+  const event: SourceDiscovered = {
+    type: "source.discovered",
+    protocol_version: 2,
+    event_id: crypto.randomUUID(),
+    client_seq: clientSequence,
+    tab_instance_id: source.tabInstanceId,
+    producer_epoch_id: source.producerEpochId,
+    platform: source.platform,
+    activity_key: source.activityKey,
+    driver_id:
+      source.platform === "synthetic"
+        ? "synthetic_captions"
+        : "browser_captions",
+    driver_version: extensionVersion,
+    capabilities: [
+      "captions",
+      "speaker_labels",
+      "daemon_source_control",
+      "normalized_evidence",
+    ],
+    health_status: source.health,
+    observed_at: observedAt,
+  };
+  discoveryRequests.set(event.event_id, source.tabId);
+  await transport.enqueue(event);
+}
 
 async function handleAdapterStatus(
   tabId: number,
   frameId: number,
-  documentId: string,
   message: Record<string, unknown>,
 ): Promise<void> {
-  if (tabId !== enabledTabId || !transport) return;
+  const source = sources.get(tabId);
+  if (!source || !source.sourceId || !transport) return;
   if (
     !frameElection.acceptStatus(
       tabId,
@@ -258,82 +397,108 @@ async function handleAdapterStatus(
       String(message.captionsStatus ?? "unknown"),
       Number(message.confidence ?? 0),
     )
-  )
+  ) {
     return;
-  captureState = {
-    platform: String(message.platform ?? "unsupported"),
-    captions: String(message.captionsStatus ?? "unknown"),
-    speaker: String(message.speakerDetection ?? "unknown"),
-  };
-  lastEventAt = new Date().toISOString();
-  clientSequence += 1;
-  activeDocumentId = documentId;
-  activeSourceId = sourceId(tabId, documentId);
-  await persistCoordinator();
-  const event: SourceStatus = {
-    type: "source.status",
-    protocol_version: 1,
-    event_id: crypto.randomUUID(),
-    source_id: activeSourceId,
-    tab_id: tabId,
-    document_id: documentId,
-    client_seq: clientSequence,
-    platform: captureState.platform as SourceStatus["platform"],
-    enabled: true,
-    captions_status: captureState.captions as SourceStatus["captions_status"],
-    speaker_detection:
-      captureState.speaker as SourceStatus["speaker_detection"],
-    meeting_key: String(message.meetingKey ?? `tab-${tabId}`),
-    observed_at: lastEventAt,
-  };
-  sourceStatusTabs.set(event.event_id, {
-    requestedTabId: tabId,
-    previousTabId: pendingPreviousTabId,
-  });
-  pendingPreviousTabId = null;
-  const accepted = await transport.enqueue(event);
-  if (!accepted) {
-    const pending = sourceStatusTabs.get(event.event_id);
-    sourceStatusTabs.delete(event.event_id);
-    postToTab(tabId, { type: "capture.disable" });
-    enabledTabId = pending?.previousTabId ?? null;
-    if (enabledTabId !== null)
-      postToTab(enabledTabId, { type: "capture.enable" });
-    await persistCoordinator();
   }
+  source.health =
+    message.captionsStatus === "error"
+      ? "degraded"
+      : message.captionsStatus === "unavailable"
+        ? "unavailable"
+        : message.captionsStatus === "capturing"
+          ? "available"
+          : "waiting";
+  source.speaker = String(message.speakerDetection ?? "unknown");
+  source.lastEventAt = new Date().toISOString();
+  clientSequence += 1;
+  const event: SourceHealth = {
+    type: "source.health",
+    protocol_version: 2,
+    event_id: crypto.randomUUID(),
+    client_seq: clientSequence,
+    source_id: source.sourceId,
+    source_epoch_id: source.sourceEpochId,
+    health_status: source.health,
+    dropped_event_count: transportState.dropped,
+    observed_at: source.lastEventAt,
+  };
+  await transport.enqueue(event);
+  await persistCoordinator();
 }
 
 async function handleUtterance(
   tabId: number,
   frameId: number,
-  documentId: string,
   message: Record<string, unknown>,
 ): Promise<void> {
-  if (tabId !== enabledTabId || !transport) return;
+  const source = sources.get(tabId);
+  if (
+    !source?.sourceId ||
+    !source.sourceEpochId ||
+    !source.sessionId ||
+    !transport
+  )
+    return;
   if (!frameElection.acceptUtterance(tabId, frameId)) return;
   clientSequence += 1;
-  lastEventAt = new Date().toISOString();
-  activeDocumentId = documentId;
-  activeSourceId = sourceId(tabId, documentId);
-  await persistCoordinator();
+  source.lastEventAt = new Date().toISOString();
+  const sessionStartedAt = Date.parse(
+    String(transportState.session?.started_at ?? ""),
+  );
+  const observedAt = Date.parse(
+    String(message.observedAt ?? source.lastEventAt),
+  );
+  const offset = Number.isFinite(sessionStartedAt)
+    ? Math.max(0, observedAt - sessionStartedAt) * 1000
+    : 0;
   const common = {
-    protocol_version: 1 as const,
+    protocol_version: 2 as const,
     event_id: crypto.randomUUID(),
-    source_id: activeSourceId,
+    source_id: source.sourceId,
+    source_epoch_id: source.sourceEpochId,
     client_seq: clientSequence,
-    platform: captureState.platform as UtteranceUpsert["platform"],
-    meeting_key: String(message.meetingKey ?? `tab-${tabId}`),
     utterance_id: String(message.utteranceId),
     revision: Number(message.revision),
     speaker: typeof message.speaker === "string" ? message.speaker : null,
     text: String(message.text),
-    observed_at: String(message.observedAt ?? lastEventAt),
+    session_offset_us: offset,
+    source_time_us: Math.max(0, Math.round(performance.now() * 1000)),
   };
-  const event: UtteranceUpsert | UtteranceFinalize =
+  const event: CaptionUpsert | CaptionFinalize =
     message.eventType === "finalize"
-      ? { ...common, type: "utterance.finalize" }
-      : { ...common, type: "utterance.upsert" };
+      ? { ...common, type: "caption.finalize" }
+      : { ...common, type: "caption.upsert" };
   await transport.enqueue(event);
+  await persistCoordinator();
+}
+
+async function handleAdapterCommandAck(
+  tabId: number,
+  message: Record<string, unknown>,
+): Promise<void> {
+  const source = sources.get(tabId);
+  if (!source?.sourceId || !source.sourceEpochId) return;
+  transport?.sendControl({
+    type: "source.command_ack",
+    protocol_version: 2,
+    command_id: String(message.commandId),
+    source_id: source.sourceId,
+    source_epoch_id: source.sourceEpochId,
+    result:
+      message.result === "finalized"
+        ? "finalized"
+        : message.result === "failed"
+          ? "failed"
+          : "started",
+    ...(typeof message.errorCode === "string"
+      ? { error_code: message.errorCode }
+      : {}),
+  });
+  if (message.result === "finalized") {
+    source.sourceEpochId = undefined;
+    source.sessionId = undefined;
+  }
+  await persistCoordinator();
 }
 
 async function downloadDiagnostic(bundle: unknown): Promise<void> {
@@ -345,46 +510,13 @@ async function downloadDiagnostic(bundle: unknown): Promise<void> {
   });
 }
 
-async function disableCapture(
-  tabId: number,
-  { notifyContent = true }: { notifyContent?: boolean } = {},
-): Promise<void> {
-  if (notifyContent) postToTab(tabId, { type: "capture.disable" });
-  frameElection.clear(tabId);
-  if (enabledTabId !== tabId) return;
-  if (transport) {
-    clientSequence += 1;
-    const observedAt = new Date().toISOString();
-    await transport.enqueue({
-      type: "source.status",
-      protocol_version: 1,
-      event_id: crypto.randomUUID(),
-      source_id:
-        activeSourceId ?? sourceId(tabId, activeDocumentId ?? "unknown"),
-      tab_id: tabId,
-      document_id: activeDocumentId ?? "unknown",
-      client_seq: clientSequence,
-      platform: captureState.platform as SourceStatus["platform"],
-      enabled: false,
-      captions_status: "off",
-      observed_at: observedAt,
-    });
-  }
-  for (const [eventId, pending] of sourceStatusTabs) {
-    if (pending.requestedTabId === tabId) sourceStatusTabs.delete(eventId);
-  }
-  enabledTabId = null;
-  activeSourceId = null;
-  activeDocumentId = null;
-  pendingPreviousTabId = null;
-  captureState = { ...captureState, captions: "off", speaker: "unknown" };
-  await persistCoordinator();
-}
-
 backgroundApi.tabs.onRemoved.addListener((tabId) => {
-  if (tabId === enabledTabId)
-    queueAdapterMessage(() => disableCapture(tabId, { notifyContent: false }));
-  else frameElection.clear(tabId);
+  const source = sources.get(tabId);
+  if (source) void reportSourceUnavailable(source);
+  sources.delete(tabId);
+  ports.delete(tabId);
+  frameElection.clear(tabId);
+  void persistCoordinator();
 });
 
 backgroundApi.runtime.onMessage.addListener(
@@ -393,32 +525,12 @@ backgroundApi.runtime.onMessage.addListener(
     void (async () => {
       await initialization;
       if (message.type === "popup.status") sendResponse(status());
-      if (message.type === "pairing.save") {
-        await backgroundApi.storage.local.set({
-          pairingToken: String(message.token),
-        });
-        await startTransport();
+      if (message.type === "pairing.begin") {
+        await beginPairing();
         sendResponse(status());
       }
-      if (message.type === "capture.enable") {
-        const tabId = Number(message.tabId);
-        // The session cached from server.hello may be stale until the next
-        // heartbeat. Let the server authoritatively accept or reject a source
-        // switch; the event acknowledgement restores the previous tab when
-        // recording is active.
-        pendingPreviousTabId = enabledTabId;
-        enabledTabId = tabId;
-        captureState = {
-          ...captureState,
-          platform: platformFromUrl(message.url as string),
-        };
-        await persistCoordinator();
-        postToTab(tabId, { type: "capture.enable" });
-        sendResponse(status());
-      }
-      if (message.type === "capture.disable") {
-        const tabId = Number(message.tabId);
-        await disableCapture(tabId);
+      if (message.type === "pairing.cancel") {
+        cancelPairing();
         sendResponse(status());
       }
       if (message.type === "diagnostics.dump") {

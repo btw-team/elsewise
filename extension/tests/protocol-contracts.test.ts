@@ -35,12 +35,12 @@ describe("protocol contract parity", () => {
   it("rejects caption text beyond the hard limit", () => {
     const payload = JSON.parse(
       readFileSync(
-        `${protocolRoot}/fixtures/valid/utterance.upsert.json`,
+        `${protocolRoot}/fixtures/valid/caption.upsert.json`,
         "utf8",
       ),
     ) as Record<string, unknown>;
     payload.text = "x".repeat(MAX_CAPTION_TEXT_LENGTH + 1);
-    expect(validateProtocolMessage("utterance.upsert", payload).valid).toBe(
+    expect(validateProtocolMessage("caption.upsert", payload).valid).toBe(
       false,
     );
   });

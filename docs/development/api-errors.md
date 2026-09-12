@@ -61,3 +61,12 @@ DE, and PT-BR; an unknown code appears in a localized fallback.
 
 New REST codes must be added to the shared catalog and this table. Automated tests
 fail when server source emits an unregistered code or a translation key is missing.
+Phase 1 source and pairing errors include `invalid_message`, `invalid_pairing_nonce`,
+`invalid_source_transition`, `paired_client_not_found`,
+`pairing_request_already_decided`, `pairing_request_not_found`,
+`pairing_rate_limited`,
+`session_not_stopping`, `session_transition_in_progress`, and
+`source_capabilities_missing`, `source_unavailable`,
+`unsupported_source_capability`, and `unsupported_source_driver`.
+The transition executor reports `transition_queue_full` when its bounded queue is
+at capacity.

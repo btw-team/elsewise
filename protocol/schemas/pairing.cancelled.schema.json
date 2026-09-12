@@ -1,0 +1,24 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/pairing.cancelled.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "type": {
+      "const": "pairing.cancelled",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": ["protocol_version", "request_id", "type"],
+  "title": "PairingCancelled",
+  "type": "object"
+}

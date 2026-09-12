@@ -13,7 +13,6 @@ import {
   apiPayload,
   globalSettings,
   installAppTestHarness,
-  pairingSettings,
   providerHealth,
   snapshot,
 } from "./appTestHarness";
@@ -86,7 +85,7 @@ describe("App settings", () => {
     const saveButtons = within(settingsDrawer).getAllByRole("button", {
       name: "Save",
     });
-    expect(saveButtons).toHaveLength(6);
+    expect(saveButtons).toHaveLength(5);
     for (const saveButton of saveButtons) {
       expect(saveButton).toHaveClass("settings-save-button");
       expect(saveButton.querySelector("svg")).not.toBeNull();
@@ -125,27 +124,48 @@ describe("App settings", () => {
     );
   });
 
-  it("copies, regenerates, and manually saves the extension pairing token", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("navigator", { clipboard: { writeText } });
+  it("approves pairing requests and revokes paired browsers", async () => {
+    let pending = [
+      {
+        id: "request-1",
+        installation_id: "installation-1",
+        browser_family: "chrome",
+        display_name: "Work Chrome",
+        extension_version: "2.0.0",
+        state: "pending",
+        created_at: "2026-08-20T10:00:00Z",
+        expires_at: "2026-08-20T10:05:00Z",
+      },
+    ];
+    let clients = [
+      {
+        id: "client-1",
+        installation_id: "installation-2",
+        browser_family: "firefox",
+        display_name: "Firefox",
+        status: "active",
+        created_at: "2026-08-20T09:00:00Z",
+        last_seen_at: null,
+        revoked_at: null,
+      },
+    ];
     vi.mocked(fetch).mockImplementation(
       async (input: RequestInfo | URL, options?: RequestInit) => {
         const path = String(input);
         let payload: unknown;
-        if (path.endsWith("/api/extension/pairing/regenerate")) {
-          payload = {
-            ...pairingSettings,
-            token: "regenerated-pairing-token",
-            generation: 2,
-          };
+        if (path.endsWith("/api/pairing/requests/request-1/approve")) {
+          pending = [];
+          payload = clients[0];
         } else if (
-          path.endsWith("/api/extension/pairing") &&
-          options?.method === "PUT"
+          path.endsWith("/api/paired-clients/client-1") &&
+          options?.method === "DELETE"
         ) {
-          const body = JSON.parse(String(options.body)) as { token: string };
-          payload = { ...pairingSettings, token: body.token, generation: 3 };
-        } else if (path.endsWith("/api/extension/pairing")) {
-          payload = pairingSettings;
+          clients = [{ ...clients[0]!, status: "revoked" }];
+          payload = clients[0];
+        } else if (path.endsWith("/api/pairing/requests")) {
+          payload = pending;
+        } else if (path.endsWith("/api/paired-clients")) {
+          payload = clients;
         } else if (path.endsWith("/api/agent/providers")) {
           payload = providerHealth;
         } else if (path.endsWith("/api/settings")) {
@@ -161,45 +181,18 @@ describe("App settings", () => {
     await screen.findByRole("heading", { name: "Product planning" });
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
 
-    const token = await screen.findByLabelText("Pairing token");
-    expect(token).toHaveValue(pairingSettings.token);
-    fireEvent.click(screen.getByRole("button", { name: "Copy token" }));
-    await waitFor(() =>
-      expect(writeText).toHaveBeenCalledWith(pairingSettings.token),
-    );
-
-    writeText.mockRejectedValueOnce(
-      new DOMException("Not allowed", "NotAllowedError"),
-    );
-    const execCommand = vi.fn(() => true);
-    Object.defineProperty(document, "execCommand", {
-      configurable: true,
-      value: execCommand,
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Copy token" }));
-    await waitFor(() => expect(execCommand).toHaveBeenCalledWith("copy"));
-    expect(document.querySelector('textarea[aria-hidden="true"]')).toBeNull();
-    Reflect.deleteProperty(document, "execCommand");
-
-    fireEvent.click(screen.getByRole("button", { name: "Regenerate" }));
-    await waitFor(() => expect(token).toHaveValue("regenerated-pairing-token"));
-    expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-      "/api/extension/pairing/regenerate",
-      expect.objectContaining({ method: "POST" }),
-    );
-
-    fireEvent.change(token, {
-      target: { value: "manual-pairing-token-value" },
-    });
-    const form = token.closest("form") as HTMLFormElement;
-    fireEvent.click(within(form).getByRole("button", { name: "Save" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Allow" }));
     await waitFor(() =>
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
-        "/api/extension/pairing",
-        expect.objectContaining({
-          method: "PUT",
-          body: JSON.stringify({ token: "manual-pairing-token-value" }),
-        }),
+        "/api/pairing/requests/request-1/approve",
+        expect.objectContaining({ method: "POST" }),
+      ),
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke" }));
+    await waitFor(() =>
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        "/api/paired-clients/client-1",
+        expect.objectContaining({ method: "DELETE" }),
       ),
     );
   });
@@ -221,8 +214,9 @@ describe("App settings", () => {
       const path = String(input);
       const payload = path.endsWith("/api/settings/initial-prompts/reset")
         ? resetSettings
-        : path.endsWith("/api/extension/pairing")
-          ? pairingSettings
+        : path.endsWith("/api/pairing/requests") ||
+            path.endsWith("/api/paired-clients")
+          ? []
           : path.endsWith("/api/agent/providers")
             ? providerHealth
             : path.endsWith("/api/settings")
@@ -483,7 +477,7 @@ describe("App settings", () => {
 
   it("offers to create a missing Codex working directory before saving", async () => {
     const idleSession = structuredClone(snapshot.sessions[0]!);
-    idleSession.recording_status = "idle";
+    idleSession.recording_status = "stopped";
     idleSession.agent_status = "not_started";
     let createAttempts = 0;
     vi.mocked(fetch).mockImplementation(
@@ -564,7 +558,7 @@ describe("App settings", () => {
 
   it("edits session data in a drawer only before the first start", async () => {
     const idle = structuredClone(snapshot);
-    idle.sessions[0]!.recording_status = "idle";
+    idle.sessions[0]!.recording_status = "stopped";
     idle.sessions[0]!.agent_status = "not_started";
     idle.sessions[0]!.started_at = null;
     idle.sessions[0]!.stopped_at = null;

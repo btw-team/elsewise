@@ -124,10 +124,10 @@ invent missing facts.
    [latest GitHub Release](https://github.com/btw-team/elsewise/releases/latest).
 2. **Install and authenticate Codex or Claude Code** if you want AI assistance.
    Recording and export work without an agent CLI.
-3. **Start Elsewise, load the browser extension, and pair it** with the token shown
-   in Settings.
+3. **Start Elsewise, load the browser extension, and pair it** by approving its
+   request in Settings.
 4. **Open a supported conversation, enable its captions, create a session, and
-   enable capture.** Choose a preset action or send a free prompt when you need help.
+   start the Session.** Choose a preset action or send a free prompt when you need help.
 
 The [installation guide](docs/installation.md) covers platform packages and unsigned
 preview warnings. [Getting started](docs/getting-started.md) walks through pairing,

@@ -1,5 +1,6 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
+from time import monotonic_ns
 from typing import Any
 
 from sqlalchemy import delete, func, select
@@ -11,15 +12,14 @@ from elsewise.persistence.database import Database
 from elsewise.persistence.models import (
     ActionPresetRecord,
     AgentThreadRecord,
-    CaptureSourceRecord,
     RecordingSegmentRecord,
     SessionRecord,
+    SourceEpochRecord,
     UtteranceRecord,
     utc_now,
 )
 from elsewise.services.errors import ServiceError
 from elsewise.services.outbox import emit_ui_event
-from elsewise.settings.limits import STOP_FINALIZE_GRACE_SECONDS
 
 
 def session_payload(record: SessionRecord) -> dict[str, Any]:
@@ -34,10 +34,9 @@ def session_payload(record: SessionRecord) -> dict[str, Any]:
         "agent_model": record.agent_model,
         "agent_reasoning_effort": record.agent_reasoning_effort,
         "recording_status": record.recording_status,
-        "capture_status": record.capture_status,
+        "source_status": record.source_status,
         "agent_status": record.agent_status,
-        "enabled_source_id": record.enabled_source_id,
-        "active_source_id": record.active_source_id,
+        "selected_source_id": record.selected_source_id,
         "allow_workspace_write": record.allow_workspace_write,
         "allow_network": record.allow_network,
         "requested_agent_cwd": record.requested_agent_cwd,
@@ -162,7 +161,7 @@ class SessionService:
                 "allow_workspace_write",
                 "allow_network",
             }
-            if changes and record.recording_status == "running":
+            if changes and record.recording_status in {"starting", "running", "stopping"}:
                 raise ServiceError(
                     "session_running",
                     "Stop the session before changing its settings.",
@@ -231,9 +230,15 @@ class SessionService:
                     record = self._get(db, session_id)
                     if record.recording_status == "running":
                         return record
+                    if record.recording_status == "stopping":
+                        raise ServiceError(
+                            "session_transition_in_progress",
+                            "The session is still stopping.",
+                            status_code=409,
+                        )
                     other = db.scalar(
                         select(SessionRecord.id).where(
-                            SessionRecord.recording_status == "running",
+                            SessionRecord.recording_status.in_(("starting", "running", "stopping")),
                             SessionRecord.id != session_id,
                         )
                     )
@@ -242,14 +247,6 @@ class SessionService:
                             "another_session_running",
                             "Only one session can record at a time.",
                         )
-                    if record.enabled_source_id is None:
-                        enabled = db.scalar(
-                            select(CaptureSourceRecord)
-                            .where(CaptureSourceRecord.enabled.is_(True))
-                            .order_by(CaptureSourceRecord.updated_at.desc())
-                        )
-                        if enabled is not None:
-                            record.enabled_source_id = enabled.source_id
                     next_sequence = (
                         db.scalar(
                             select(func.max(RecordingSegmentRecord.sequence)).where(
@@ -258,26 +255,23 @@ class SessionService:
                         )
                         or 0
                     ) + 1
-                    record.recording_status = "running"
+                    record.recording_status = "starting"
                     record.started_at = started_at
                     record.stopped_at = None
-                    record.finalize_grace_until = None
-                    record.finalize_grace_source_id = None
+                    record.stop_requested_at = None
+                    record.stop_boundary_offset_us = None
+                    record.monotonic_origin_ns = monotonic_ns()
+                    record.selected_source_id = None
+                    record.source_status = "waiting_for_source"
                     record.version += 1
-                    if record.enabled_source_id is None:
-                        record.active_source_id = None
-                        record.capture_status = "waiting_for_source"
-                    else:
-                        record.active_source_id = record.enabled_source_id
-                        record.capture_status = "captions_not_detected"
                     segment = RecordingSegmentRecord(
                         session_id=record.id,
                         sequence=next_sequence,
-                        source_id=record.active_source_id,
                         started_at=started_at,
                     )
                     db.add(segment)
                     db.flush()
+                    record.recording_status = "running"
                     emit_ui_event(db, "session.state", record.id, session_payload(record))
                     log_event("session.started", session_id=record.id, state="running")
                     return record
@@ -286,7 +280,32 @@ class SessionService:
                     "another_session_running", "Only one session can record at a time."
                 ) from exc
 
-    def stop(
+    def begin_stop(
+        self,
+        session_id: str,
+        *,
+        now: datetime | None = None,
+    ) -> SessionRecord:
+        requested_at = now or utc_now()
+        with self.database.transition_lock, self.database.transaction() as db:
+            record = self._get(db, session_id)
+            if record.recording_status == "stopped":
+                return record
+            if record.recording_status == "stopping":
+                return record
+            if record.recording_status != "running":
+                raise ServiceError("session_not_running", "The session is not running.")
+            record.recording_status = "stopping"
+            record.stop_requested_at = requested_at
+            record.stop_boundary_offset_us = max(
+                0,
+                (monotonic_ns() - (record.monotonic_origin_ns or monotonic_ns())) // 1_000,
+            )
+            record.version += 1
+            emit_ui_event(db, "session.state", record.id, session_payload(record))
+            return record
+
+    def finish_stop(
         self,
         session_id: str,
         *,
@@ -294,12 +313,14 @@ class SessionService:
         reason: str = "user",
     ) -> SessionRecord:
         stopped_at = now or utc_now()
-        with self.database.transaction() as db:
+        with self.database.transition_lock, self.database.transaction() as db:
             record = self._get(db, session_id)
             if record.recording_status == "stopped":
                 return record
-            if record.recording_status != "running":
-                raise ServiceError("session_not_running", "The session is not running.")
+            if record.recording_status != "stopping":
+                raise ServiceError(
+                    "session_not_stopping", "The session is not stopping.", status_code=409
+                )
             segment = db.scalar(
                 select(RecordingSegmentRecord)
                 .where(
@@ -316,23 +337,43 @@ class SessionService:
             segment.stop_reason = reason
             record.recording_status = "stopped"
             record.stopped_at = stopped_at
-            record.finalize_grace_source_id = record.active_source_id
-            record.finalize_grace_until = stopped_at + timedelta(
-                seconds=STOP_FINALIZE_GRACE_SECONDS
-            )
-            record.active_source_id = None
-            record.capture_status = (
-                "connected" if record.enabled_source_id is not None else "no_source"
-            )
+            record.selected_source_id = None
+            record.source_status = "no_source"
             record.version += 1
+            for epoch in db.scalars(
+                select(SourceEpochRecord).where(
+                    SourceEpochRecord.session_id == session_id,
+                    SourceEpochRecord.state.in_(("starting", "running", "stopping")),
+                )
+            ):
+                epoch.state = "stopped"
+                epoch.ended_at = stopped_at
+                epoch.end_reason = epoch.end_reason or "forced_stop"
+            for utterance in db.scalars(
+                select(UtteranceRecord).where(
+                    UtteranceRecord.session_id == session_id,
+                    UtteranceRecord.final.is_(False),
+                )
+            ):
+                utterance.final = True
             emit_ui_event(db, "session.state", record.id, session_payload(record))
             log_event("session.stopped", session_id=record.id, state="stopped", reason=reason)
             return record
 
+    def stop(
+        self,
+        session_id: str,
+        *,
+        now: datetime | None = None,
+        reason: str = "user",
+    ) -> SessionRecord:
+        self.begin_stop(session_id, now=now)
+        return self.finish_stop(session_id, now=now, reason=reason)
+
     def delete(self, session_id: str) -> None:
         with self.database.transaction() as db:
             record = self._get(db, session_id)
-            if record.recording_status == "running":
+            if record.recording_status in {"starting", "running", "stopping"}:
                 raise ServiceError("session_running", "Stop the session before deleting it.")
             db.delete(record)
             emit_ui_event(db, "session.state", session_id, {"id": session_id, "deleted": True})
@@ -346,7 +387,7 @@ class SessionService:
                     select(UtteranceRecord)
                     .where(UtteranceRecord.session_id == session_id)
                     .order_by(
-                        UtteranceRecord.first_observed_at,
+                        UtteranceRecord.first_session_offset_us,
                         UtteranceRecord.first_client_seq,
                     )
                 )
@@ -355,7 +396,7 @@ class SessionService:
     def cleanup_partial_utterances(self, session_id: str) -> int:
         with self.database.transaction() as db:
             record = self._get(db, session_id)
-            if record.recording_status == "running":
+            if record.recording_status in {"starting", "running", "stopping"}:
                 return 0
             result = db.execute(
                 delete(UtteranceRecord).where(
@@ -363,8 +404,6 @@ class SessionService:
                     UtteranceRecord.final.is_(False),
                 )
             )
-            record.finalize_grace_source_id = None
-            record.finalize_grace_until = None
             return int(getattr(result, "rowcount", 0) or 0)
 
     @staticmethod
@@ -379,15 +418,15 @@ def recover_after_restart(database: Database) -> None:
     recovered_at = datetime.now(UTC)
     with database.transaction() as db:
         running_sessions = db.scalars(
-            select(SessionRecord).where(SessionRecord.recording_status == "running")
+            select(SessionRecord).where(
+                SessionRecord.recording_status.in_(("starting", "running", "stopping"))
+            )
         )
         for record in running_sessions:
             record.recording_status = "stopped"
-            record.capture_status = "no_source"
+            record.source_status = "no_source"
             record.stopped_at = recovered_at
-            record.active_source_id = None
-            record.finalize_grace_source_id = None
-            record.finalize_grace_until = None
+            record.selected_source_id = None
             record.version += 1
             open_segments = db.scalars(
                 select(RecordingSegmentRecord).where(
@@ -398,6 +437,15 @@ def recover_after_restart(database: Database) -> None:
             for segment in open_segments:
                 segment.stopped_at = recovered_at
                 segment.stop_reason = "daemon_restart"
+            for epoch in db.scalars(
+                select(SourceEpochRecord).where(
+                    SourceEpochRecord.session_id == record.id,
+                    SourceEpochRecord.state.in_(("starting", "running", "stopping")),
+                )
+            ):
+                epoch.state = "stopped"
+                epoch.ended_at = recovered_at
+                epoch.end_reason = "daemon_restart"
             db.execute(
                 delete(UtteranceRecord).where(
                     UtteranceRecord.session_id == record.id,

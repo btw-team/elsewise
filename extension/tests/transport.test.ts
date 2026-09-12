@@ -42,17 +42,16 @@ class FakeSocket {
 }
 
 const bufferedEvent: BufferedEvent = {
-  type: "utterance.upsert",
-  protocol_version: 1,
+  type: "caption.upsert",
+  protocol_version: 2,
   event_id: "00000000-0000-4000-8000-000000000001",
   source_id: "source",
   client_seq: 1,
-  platform: "synthetic",
-  meeting_key: "harness",
+  source_epoch_id: "epoch",
   utterance_id: "utterance-1",
   revision: 1,
   text: "hello",
-  observed_at: "2026-08-13T12:00:00.000Z",
+  session_offset_us: 1,
 };
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -79,7 +78,7 @@ describe("ingest transport", () => {
     await settle();
     expect(firstSocket.sent.map((message) => message.type)).toEqual([
       "client.hello",
-      "utterance.upsert",
+      "caption.upsert",
     ]);
     firstSocket.receive({
       type: "event.ack",
@@ -137,6 +136,7 @@ describe("ingest transport", () => {
         event_id: "00000000-0000-4000-8000-000000000002",
         client_seq: 2,
         utterance_id: "utterance-2",
+        session_offset_us: 2,
       },
       "session-1",
     );
@@ -147,6 +147,7 @@ describe("ingest transport", () => {
       "00000000-0000-4000-8000-000000000099",
       "0.1.2",
       () => socket,
+      undefined,
       undefined,
       undefined,
       undefined,
@@ -162,14 +163,14 @@ describe("ingest transport", () => {
     await settle();
     expect(socket.sent.map((message) => message.type)).toEqual([
       "client.hello",
-      "utterance.upsert",
+      "caption.upsert",
     ]);
 
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
     expect(socket.sent.map((message) => message.type)).toEqual([
       "client.hello",
-      "utterance.upsert",
-      "utterance.upsert",
+      "caption.upsert",
+      "caption.upsert",
     ]);
     transport.stop();
   });
@@ -195,7 +196,7 @@ describe("ingest transport", () => {
     await settle();
     socket.receive({
       type: "protocol.error",
-      protocol_version: 1,
+      protocol_version: 2,
       event_id: bufferedEvent.event_id,
       client_seq: 1,
       code: "rate_limited",
@@ -207,7 +208,7 @@ describe("ingest transport", () => {
 
     socket.receive({
       type: "protocol.error",
-      protocol_version: 1,
+      protocol_version: 2,
       event_id: bufferedEvent.event_id,
       client_seq: 1,
       code: "invalid_message",

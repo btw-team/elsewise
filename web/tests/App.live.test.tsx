@@ -31,7 +31,7 @@ describe("App live", () => {
       ).length;
     FakeWebSocket.instances.at(-1)?.receive({
       type: "ui.event",
-      protocol_version: 1,
+      protocol_version: 2,
       event_id: 5,
       event_type: "utterance.created",
       aggregate_id: "utterance-2",
@@ -164,7 +164,9 @@ describe("App live", () => {
       within(actionBar as HTMLElement).getByRole("button", { name: "Actions" }),
     ).toBeDisabled();
     expect(screen.getByRole("button", { name: "Edit session" })).toBeDisabled();
-    expect(screen.getByText("Google meet")).toBeInTheDocument();
+    expect(
+      screen.getByText("Browser extension · browser · google meet · #1"),
+    ).toBeInTheDocument();
   });
 
   it("resizes columns and toggles the transcript from the shared action bar", async () => {
@@ -254,8 +256,10 @@ describe("App live", () => {
     earliest.id = "utterance-earliest";
     earliest.utterance_id = "caption-earliest";
     earliest.text = "Earlier transcript page";
-    earliest.first_observed_at = "2026-08-13T09:59:00Z";
-    earliest.last_observed_at = "2026-08-13T09:59:00Z";
+    earliest.first_session_offset_us = 0;
+    earliest.last_session_offset_us = 0;
+    earliest.first_received_at = "2026-08-13T09:59:00Z";
+    earliest.last_received_at = "2026-08-13T09:59:00Z";
     earliest.first_client_seq = 0;
     earliest.last_client_seq = 0;
     vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {

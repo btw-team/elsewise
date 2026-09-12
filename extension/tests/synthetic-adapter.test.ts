@@ -67,4 +67,29 @@ describe("synthetic adapter", () => {
     expect(dump.subtree?.length).toBeLessThanOrEqual(100_000);
     adapter.stop();
   });
+
+  it("flushes a partial utterance before acknowledging source stop", () => {
+    document.body.innerHTML = `
+      <section data-elsewise-captions>
+        <article data-utterance-id="u1" data-speaker="Speaker A">
+          <span data-caption-text>Still speaking</span>
+        </article>
+      </section>`;
+    const adapter = new SyntheticAdapter(document);
+    const events: Array<{ type: string; revision: number; text: string }> = [];
+    adapter.start(
+      (event) => events.push(event),
+      () => undefined,
+    );
+
+    adapter.stop(true);
+
+    expect(events.at(-1)).toEqual(
+      expect.objectContaining({
+        type: "finalize",
+        revision: 1,
+        text: "Still speaking",
+      }),
+    );
+  });
 });

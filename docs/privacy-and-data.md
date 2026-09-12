@@ -22,14 +22,10 @@ Elsewise uses OS-native per-user directories through `platformdirs`:
 
 ## Pairing credential
 
-The browser extension pairing token is a local credential stored in `pairing.json`
-under the per-user config directory and in the paired extension's local browser
-storage. The web GUI and launcher show the same value in Settings. The token is not
-included in URLs and must not appear in logs or diagnostic bundles.
-
-Regenerating or manually replacing the token immediately invalidates the previous
-credential. It does not delete transcripts or other application data. The pairing
-token is separate from the short-lived runtime control token used for private
+Each paired browser stores a unique local credential. Elsewise persists only its
+digest in the database and never displays the plaintext value. Revocation affects
+only the selected client and does not delete transcripts. Browser credentials are
+separate from the short-lived runtime control credential used for private
 launcher-to-server lifecycle requests.
 
 ## Browser buffer

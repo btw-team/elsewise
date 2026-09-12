@@ -1,6 +1,5 @@
 import base64
 import json
-from datetime import datetime
 from typing import Any
 
 from elsewise.services.errors import ServiceError
@@ -26,16 +25,16 @@ def decode_cursor(value: str | None) -> dict[str, Any] | None:
     return payload
 
 
-def utterance_cursor(observed_at: datetime, client_seq: int, record_id: str) -> str:
-    return encode_cursor({"at": observed_at.isoformat(), "seq": client_seq, "id": record_id})
+def utterance_cursor(session_offset_us: int, client_seq: int, record_id: str) -> str:
+    return encode_cursor({"offset_us": session_offset_us, "seq": client_seq, "id": record_id})
 
 
-def parse_utterance_cursor(value: str | None) -> tuple[datetime, int, str] | None:
+def parse_utterance_cursor(value: str | None) -> tuple[int, int, str] | None:
     payload = decode_cursor(value)
     if payload is None:
         return None
     try:
-        return datetime.fromisoformat(str(payload["at"])), int(payload["seq"]), str(payload["id"])
+        return int(payload["offset_us"]), int(payload["seq"]), str(payload["id"])
     except (KeyError, TypeError, ValueError) as exc:
         raise ServiceError(
             "invalid_cursor", "The pagination cursor is invalid.", status_code=422

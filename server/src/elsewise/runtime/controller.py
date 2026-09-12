@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from secrets import token_urlsafe
 from typing import Any, Literal, cast
+from urllib.parse import quote
 
 from elsewise import __version__
 from elsewise.runtime.descriptor import (
@@ -308,6 +309,26 @@ class DaemonController:
                 return cast(dict[str, Any], value) if isinstance(value, dict) else None
         except (OSError, ValueError, urllib.error.URLError):
             return None
+
+    def pairing_action(self, action: str, target_id: str) -> bool:
+        current = self.status()
+        if current.state != "running" or not current.url or not target_id:
+            return False
+        encoded = quote(target_id, safe="")
+        if action in {"approve", "deny"}:
+            path = f"/api/pairing/requests/{encoded}/{action}"
+            method = "POST"
+        elif action == "revoke":
+            path = f"/api/paired-clients/{encoded}"
+            method = "DELETE"
+        else:
+            return False
+        request = urllib.request.Request(f"{current.url}{path}", method=method)
+        try:
+            with urllib.request.urlopen(request, timeout=1.0) as response:
+                return int(response.status) == 200
+        except (OSError, urllib.error.URLError):
+            return False
 
     def open_web_gui(self) -> bool:
         if self.status().state != "running":

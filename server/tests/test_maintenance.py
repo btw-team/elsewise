@@ -9,6 +9,7 @@ from elsewise.persistence.models import (
     CaptionEventTombstoneRecord,
     CaptureSourceRecord,
     MaintenanceStateRecord,
+    PairedClientRecord,
     UiEventRecord,
 )
 from elsewise.services import maintenance
@@ -46,10 +47,10 @@ def test_startup_retention_is_bounded_private_and_vacuum_is_throttled(
                 CaptionEventDiagnosticRecord(
                     event_id=f"diagnostic-{index}",
                     source_id="source",
-                    event_type="utterance.upsert",
+                    event_type="caption.upsert",
                     processing_result="rejected",
                     reason_code=reason,
-                    protocol_version=1,
+                    protocol_version=2,
                     received_at=NOW - age,
                 )
             )
@@ -71,30 +72,44 @@ def test_startup_retention_is_bounded_private_and_vacuum_is_throttled(
             )
         db.add(
             CaptionEventCounterRecord(
-                event_type="utterance.upsert",
+                event_type="caption.upsert",
                 processing_result="rejected",
                 reason_code="no_running_session",
-                protocol_version=1,
+                protocol_version=2,
                 count=99,
                 first_received_at=NOW - timedelta(days=30),
                 last_received_at=NOW,
             )
         )
+        client = PairedClientRecord(
+            installation_id="00000000-0000-4000-8000-000000000001",
+            browser_family="chrome",
+            display_name="Test Chrome",
+            credential_digest="0" * 64,
+        )
+        db.add(client)
+        db.flush()
         db.add_all(
             [
                 CaptureSourceRecord(
-                    source_id="old-source",
-                    installation_id="installation",
+                    id="old-source",
+                    paired_client_id=client.id,
                     platform="google_meet",
-                    enabled=False,
+                    driver_id="google_meet_captions",
+                    driver_version="2.0.0",
+                    tab_instance_id="old-tab",
+                    available=False,
                     connected=False,
                     updated_at=NOW - timedelta(days=8),
                 ),
                 CaptureSourceRecord(
-                    source_id="recent-source",
-                    installation_id="installation",
+                    id="recent-source",
+                    paired_client_id=client.id,
                     platform="google_meet",
-                    enabled=False,
+                    driver_id="google_meet_captions",
+                    driver_version="2.0.0",
+                    tab_instance_id="recent-tab",
+                    available=False,
                     connected=False,
                     updated_at=NOW - timedelta(days=1),
                 ),

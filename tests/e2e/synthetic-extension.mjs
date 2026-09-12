@@ -101,7 +101,6 @@ const daemon = spawn(
       ELSEWISE_RUNTIME_DIR: join(temporary, "runtime"),
       ELSEWISE_DIAGNOSTICS_DIR: join(temporary, "diagnostics"),
       ELSEWISE_DATABASE_URL: `sqlite:///${join(temporary, "e2e.sqlite3")}`,
-      ELSEWISE_PAIRING_PATH: join(temporary, "pairing.json"),
       ELSEWISE_AGENT_PROVIDER: "fake",
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -191,7 +190,8 @@ async function pollSnapshot(predicate, timeout = 15_000) {
         sessions: latest.sessions?.map((session) => ({
           id: session.id,
           recording_status: session.recording_status,
-          capture_status: session.capture_status,
+          source_status: session.source_status,
+          selected_source_id: session.selected_source_id,
         })),
         sources: latest.sources,
         utterances: latest.utterances,
@@ -206,14 +206,6 @@ async function pollSnapshot(predicate, timeout = 15_000) {
 try {
   await waitFor(`http://127.0.0.1:${daemonPort}/api/health`);
   await waitFor(`http://127.0.0.1:${fixturePort}/?elsewise-synthetic=1`);
-  const pairing = await jsonRequest("/api/extension/pairing/regenerate", {
-    method: "POST",
-  });
-  const session = await jsonRequest("/api/sessions", {
-    method: "POST",
-    body: JSON.stringify({ title: "Synthetic E2E" }),
-  });
-  await jsonRequest(`/api/sessions/${session.id}/start`, { method: "POST" });
 
   const browserOptions = {
     channel: "chromium",
@@ -256,26 +248,41 @@ try {
   const extensionPage = await context.newPage();
   await extensionPage.setViewportSize({ width: 420, height: 720 });
   await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
-  await extensionPage.evaluate(
-    async ({ token, url }) => {
-      await chrome.runtime.sendMessage({ type: "pairing.save", token });
-      const [tab] = await chrome.tabs.query({ url });
-      if (tab?.id === undefined) throw new Error("Synthetic tab was not found");
-      await chrome.runtime.sendMessage({
-        type: "capture.enable",
-        tabId: tab.id,
-        url,
-      });
-    },
-    { token: pairing.token, url: harnessUrl },
-  );
+  await extensionPage.locator("#pair").click();
+  const pendingRequest = await (async () => {
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      const requests = await jsonRequest("/api/pairing/requests");
+      if (requests[0]) return requests[0];
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+    }
+    throw new Error("Timed out waiting for the extension pairing request");
+  })();
+  await jsonRequest(`/api/pairing/requests/${pendingRequest.id}/approve`, {
+    method: "POST",
+  });
   await extensionPage.waitForFunction(async () => {
     const state = await chrome.runtime.sendMessage({ type: "popup.status" });
-    return state.daemon === "connected" && state.enabledTabId !== null;
+    return state.daemon === "connected" && state.pairing === "paired";
   });
 
   await pollSnapshot((snapshot) =>
-    snapshot.sources.some((source) => source.enabled),
+    snapshot.sources.some(
+      (source) =>
+        source.platform === "synthetic" &&
+        source.connected === true &&
+        source.available === true,
+    ),
+  );
+  const session = await jsonRequest("/api/sessions", {
+    method: "POST",
+    body: JSON.stringify({ title: "Synthetic E2E" }),
+  });
+  await jsonRequest(`/api/sessions/${session.id}/start`, { method: "POST" });
+  await pollSnapshot(
+    (snapshot) =>
+      snapshot.sessions[0]?.recording_status === "running" &&
+      typeof snapshot.sessions[0]?.selected_source_id === "string",
   );
 
   await page.locator("[data-elsewise-captions]").evaluate((root) => {
@@ -321,7 +328,7 @@ try {
     await extensionPage.reload();
     await extensionPage.waitForFunction(async () => {
       const state = await chrome.runtime.sendMessage({ type: "popup.status" });
-      return state.daemon === "connected" && state.enabledTabId !== null;
+      return state.daemon === "connected" && state.pairing === "paired";
     });
     await extensionPage.screenshot({
       path: join(root, "docs", "assets", "screenshots", "extension-popup.png"),
@@ -371,8 +378,28 @@ try {
       `Expected exactly two utterances, got ${afterRestart.utterances.length}`,
     );
   }
+  await jsonRequest(`/api/sessions/${session.id}/stop`, { method: "POST" });
+  const stopped = await pollSnapshot(
+    (snapshot) => snapshot.sessions[0]?.recording_status === "stopped",
+  );
+  const stoppedUtteranceCount = stopped.utterances.length;
+  await page.locator("[data-elsewise-captions]").evaluate((root) => {
+    root.insertAdjacentHTML(
+      "beforeend",
+      `<article data-utterance-id="e2e-late" data-speaker="Speaker C" data-final="true">
+        <span data-caption-text>After stop boundary</span>
+      </article>`,
+    );
+  });
+  await new Promise((resolvePromise) => setTimeout(resolvePromise, 500));
+  const afterStop = await pollSnapshot(
+    (snapshot) => snapshot.sessions[0]?.recording_status === "stopped",
+  );
+  if (afterStop.utterances.length !== stoppedUtteranceCount) {
+    throw new Error("Transcript changed after the session reached stopped");
+  }
   process.stdout.write(
-    "Synthetic E2E passed: captions, persisted agent action and worker restart.\n",
+    "Synthetic E2E passed: pairing, captions, agent action, worker restart and bounded stop.\n",
   );
 } catch (error) {
   throw new Error(

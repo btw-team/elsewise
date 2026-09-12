@@ -1,5 +1,9 @@
 # Elsewise release checklist
 
+For the Phase 1 clean cut, release notes must tell existing preview users to delete
+the old database before first launch. Do not advertise schema migration or backward
+compatibility for pre-Phase-1 data.
+
 This checklist applies to one coordinated product version containing the server,
 launcher, web GUI, Chrome extension, and Firefox extension.
 

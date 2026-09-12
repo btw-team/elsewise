@@ -4,7 +4,8 @@ import type {
   AgentRun,
   ButtonDefinition,
   GlobalSettings,
-  PairingSettings,
+  PairedClient,
+  PairingRequest,
   SessionSummary,
   GlobalSnapshot,
   SessionDetail,
@@ -149,15 +150,29 @@ export const api = {
     request<GlobalSettings>("/api/settings/initial-prompts/reset", {
       method: "POST",
     }),
-  pairing: () => request<PairingSettings>("/api/extension/pairing"),
-  updatePairing: (token: string) =>
-    request<PairingSettings>("/api/extension/pairing", {
-      method: "PUT",
-      body: JSON.stringify({ token }),
-    }),
-  regeneratePairing: () =>
-    request<PairingSettings>("/api/extension/pairing/regenerate", {
+  pairingRequests: () => request<PairingRequest[]>("/api/pairing/requests"),
+  pairedClients: () => request<PairedClient[]>("/api/paired-clients"),
+  approvePairing: (requestId: string) =>
+    request<PairedClient>(`/api/pairing/requests/${requestId}/approve`, {
       method: "POST",
+    }),
+  denyPairing: (requestId: string) =>
+    request<PairingRequest>(`/api/pairing/requests/${requestId}/deny`, {
+      method: "POST",
+    }),
+  renamePairedClient: (clientId: string, displayName: string) =>
+    request<PairedClient>(`/api/paired-clients/${clientId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ display_name: displayName }),
+    }),
+  revokePairedClient: (clientId: string) =>
+    request<PairedClient>(`/api/paired-clients/${clientId}`, {
+      method: "DELETE",
+    }),
+  selectSource: (sessionId: string, sourceId: string) =>
+    request<SessionSummary>(`/api/sessions/${sessionId}/source`, {
+      method: "POST",
+      body: JSON.stringify({ source_id: sourceId }),
     }),
   createButton: (
     body: Pick<

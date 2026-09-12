@@ -26,10 +26,10 @@ Elsewise.
 
 ## Capture lifecycle
 
-Only one Elsewise session records at a time. A session may start before an
-enabled source exists. Before recording begins, the enabled meeting tab can change;
-during recording, switching to another meeting is rejected to prevent transcripts
-from being mixed.
+Only one Elsewise session records at a time. A session may start before a source is
+available and remains running in `waiting_for_source`. The daemon selects the only
+available captions source automatically; when several candidates exist, the user
+chooses one in the web GUI. Source loss does not stop the session.
 
 Partial utterances update in place. Finalization occurs when the platform marks a
 caption final, replaces or removes its caption node, changes speakers, disables

@@ -1,0 +1,19 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/heartbeat.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "type": {
+      "const": "heartbeat",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": ["type", "protocol_version"],
+  "title": "Heartbeat",
+  "type": "object"
+}

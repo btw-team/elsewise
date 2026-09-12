@@ -7,7 +7,6 @@ import pytest
 from elsewise.launcher.updates import UpdateCache, UpdateCacheStore
 from elsewise.settings.config import SettingsStore
 from elsewise.settings.launcher import LauncherSettings, LauncherSettingsStore
-from elsewise.settings.pairing import PairingManager
 
 
 def test_global_settings_updates_are_atomic_within_process(tmp_path: Path) -> None:
@@ -50,72 +49,6 @@ def test_global_theme_defaults_dark_for_legacy_settings_and_persists(tmp_path: P
     assert store.load().ui_theme == "dark"
     assert store.update({"ui_theme": "light"}).ui_theme == "light"
     assert SettingsStore(path).load().ui_theme == "light"
-
-
-def test_pairing_regeneration_is_atomic_within_process(tmp_path: Path) -> None:
-    manager = PairingManager(tmp_path / "pairing.json")
-    workers = 12
-    barrier = Barrier(workers)
-
-    def regenerate(_: int) -> str:
-        barrier.wait()
-        return manager.regenerate()
-
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        tokens = list(executor.map(regenerate, range(workers)))
-
-    assert len(set(tokens)) == workers
-    assert manager.metadata().generation == workers
-    assert sum(manager.verify(token) for token in tokens) == 1
-    assert (tmp_path / "pairing.json").stat().st_mode & 0o777 == 0o600
-
-
-def test_pairing_ensure_recovers_corrupt_disposable_credentials(tmp_path: Path) -> None:
-    path = tmp_path / "pairing.json"
-    path.write_text("not json", encoding="utf-8")
-    manager = PairingManager(path)
-
-    metadata = manager.ensure()
-
-    assert metadata.generation == 1
-    assert "…" in metadata.masked_token
-    assert path.stat().st_mode & 0o777 == 0o600
-
-
-def test_pairing_ensure_creates_token_only_when_missing(tmp_path: Path) -> None:
-    manager = PairingManager(tmp_path / "pairing.json")
-
-    first = manager.ensure()
-    token = manager.token()
-    second = manager.ensure()
-
-    assert len(token) >= 16
-    assert first == second
-    assert second.generation == 1
-
-
-def test_pairing_manual_token_save_is_immediate_and_idempotent(tmp_path: Path) -> None:
-    manager = PairingManager(tmp_path / "pairing.json")
-    manager.ensure()
-    manual = "manually-entered-pairing-token"
-
-    updated = manager.save(f"  {manual}  ")
-    unchanged = manager.save(manual)
-
-    assert manager.token() == manual
-    assert manager.verify(manual)
-    assert updated.generation == 2
-    assert unchanged == updated
-    assert (tmp_path / "pairing.json").stat().st_mode & 0o777 == 0o600
-
-
-@pytest.mark.parametrize("token", ["too-short", "x" * 4097])
-def test_pairing_manual_token_rejects_invalid_length(tmp_path: Path, token: str) -> None:
-    manager = PairingManager(tmp_path / "pairing.json")
-    manager.ensure()
-
-    with pytest.raises(ValueError, match="Pairing token"):
-        manager.save(token)
 
 
 @pytest.mark.parametrize("store_kind", ["settings", "launcher", "update_cache"])

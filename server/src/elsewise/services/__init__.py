@@ -1,4 +1,4 @@
-from elsewise.services.capture import CaptureService
+from elsewise.services.session_controller import SessionController
 from elsewise.services.sessions import SessionService
 
-__all__ = ["CaptureService", "SessionService"]
+__all__ = ["SessionController", "SessionService"]

@@ -32,9 +32,10 @@ from elsewise.api.schemas import (
     ButtonCreate,
     ButtonUpdate,
     GlobalSettingsUpdate,
-    PairingTokenUpdate,
+    PairedClientRename,
     SessionCreate,
     SessionUpdate,
+    SourceSelection,
 )
 from elsewise.api.security import safe_http_request, safe_ui_websocket
 from elsewise.api.serialization import (
@@ -54,8 +55,10 @@ from elsewise.persistence.models import (
     CaptionEventCounterRecord,
     CaptureSourceRecord,
     MaintenanceStateRecord,
+    PairedClientRecord,
     RecordingSegmentRecord,
     SessionRecord,
+    SourceEpochRecord,
     UiEventRecord,
     UtteranceRecord,
 )
@@ -63,13 +66,14 @@ from elsewise.services.action_presets import ActionPresetService
 from elsewise.services.buttons import ButtonService, button_payload
 from elsewise.services.errors import ServiceError
 from elsewise.services.outbox import emit_ui_event
+from elsewise.services.pairing import PairingService
 from elsewise.services.runtime_status import RuntimeStatusService
+from elsewise.services.session_controller import SessionController
 from elsewise.services.sessions import SessionService, prepare_agent_cwd, session_payload
 from elsewise.services.speaker_identity import classify_speaker, own_speaker_names
 from elsewise.settings.config import DEFAULT_INITIAL_PROMPTS, SettingsStore
 from elsewise.settings.languages import SUPPORTED_LANGUAGE_SET
-from elsewise.settings.limits import STOP_FINALIZE_GRACE_SECONDS, UI_SEND_TIMEOUT_SECONDS
-from elsewise.settings.pairing import PairingManager
+from elsewise.settings.limits import UI_SEND_TIMEOUT_SECONDS
 
 router = APIRouter(prefix="/api")
 
@@ -115,44 +119,50 @@ async def runtime_status(request: Request) -> dict[str, Any]:
     return await service.snapshot()
 
 
-@router.get("/extension/pairing")
-def pairing_metadata(request: Request) -> dict[str, Any]:
+@router.get("/pairing/requests")
+def pairing_requests(request: Request) -> list[dict[str, object]]:
     _require_local_origin(request)
-    pairing: PairingManager = request.app.state.pairing
-    metadata = pairing.metadata()
-    return {
-        "token": pairing.token(),
-        "masked_token": metadata.masked_token,
-        "created_at": metadata.created_at,
-        "generation": metadata.generation,
-    }
+    pairing: PairingService = request.app.state.pairing
+    return [pairing.request_payload(item) for item in pairing.list_requests()]
 
 
-@router.put("/extension/pairing")
-def update_pairing(body: PairingTokenUpdate, request: Request) -> dict[str, Any]:
+@router.post("/pairing/requests/{request_id}/approve")
+def approve_pairing(request_id: str, request: Request) -> dict[str, object]:
     _require_local_origin(request)
-    pairing: PairingManager = request.app.state.pairing
-    metadata = pairing.save(body.token)
-    return {
-        "token": pairing.token(),
-        "masked_token": metadata.masked_token,
-        "created_at": metadata.created_at,
-        "generation": metadata.generation,
-    }
+    pairing: PairingService = request.app.state.pairing
+    return pairing.client_payload(pairing.approve(request_id))
 
 
-@router.post("/extension/pairing/regenerate")
-def regenerate_pairing(request: Request) -> dict[str, Any]:
+@router.post("/pairing/requests/{request_id}/deny")
+def deny_pairing(request_id: str, request: Request) -> dict[str, object]:
     _require_local_origin(request)
-    pairing: PairingManager = request.app.state.pairing
-    token = pairing.regenerate()
-    metadata = pairing.metadata()
-    return {
-        "token": token,
-        "masked_token": metadata.masked_token,
-        "created_at": metadata.created_at,
-        "generation": metadata.generation,
-    }
+    pairing: PairingService = request.app.state.pairing
+    return pairing.request_payload(pairing.decide(request_id, "denied"))
+
+
+@router.get("/paired-clients")
+def paired_clients(request: Request) -> list[dict[str, object]]:
+    _require_local_origin(request)
+    pairing: PairingService = request.app.state.pairing
+    return [pairing.client_payload(item) for item in pairing.list_clients()]
+
+
+@router.patch("/paired-clients/{client_id}")
+def rename_paired_client(
+    client_id: str, body: PairedClientRename, request: Request
+) -> dict[str, object]:
+    _require_local_origin(request)
+    pairing: PairingService = request.app.state.pairing
+    return pairing.client_payload(pairing.rename(client_id, body.display_name))
+
+
+@router.delete("/paired-clients/{client_id}")
+async def revoke_paired_client(client_id: str, request: Request) -> dict[str, object]:
+    _require_local_origin(request)
+    pairing: PairingService = request.app.state.pairing
+    client = pairing.revoke(client_id)
+    await request.app.state.browser_connections.close_client(client_id)
+    return pairing.client_payload(client)
 
 
 async def _validate_agent_selection(
@@ -443,13 +453,14 @@ def delete_action_preset(preset_id: str, database: DatabaseDependency) -> Respon
 
 
 @router.post("/sessions/{session_id}/start")
-def start_session(
+async def start_session(
     session_id: str, request: Request, database: DatabaseDependency
 ) -> dict[str, Any]:
     manager: AgentQueueManager = request.app.state.agent_queue
     if manager.draining:
         raise HTTPException(status_code=409, detail="agent_queue_draining")
-    SessionService(database).start(session_id)
+    controller: SessionController = request.app.state.session_controller
+    await controller.start(session_id)
     # Enqueue is durable and fast; the background worker owns all agent I/O.
     manager.ensure_initial_run(session_id)
     return session_payload(SessionService(database).get(session_id))
@@ -459,17 +470,17 @@ def start_session(
 async def stop_session(
     session_id: str, request: Request, database: DatabaseDependency
 ) -> dict[str, Any]:
-    record = SessionService(database).stop(session_id)
-
-    async def cleanup() -> None:
-        await asyncio.sleep(STOP_FINALIZE_GRACE_SECONDS)
-        SessionService(database).cleanup_partial_utterances(session_id)
-
-    task = asyncio.create_task(cleanup(), name=f"finalize-session-{session_id}")
-    cleanup_tasks: set[asyncio.Task[None]] = request.app.state.session_cleanup_tasks
-    cleanup_tasks.add(task)
-    task.add_done_callback(cleanup_tasks.discard)
+    controller: SessionController = request.app.state.session_controller
+    record = await controller.stop(session_id)
     return session_payload(record)
+
+
+@router.post("/sessions/{session_id}/source")
+async def select_session_source(
+    session_id: str, body: SourceSelection, request: Request
+) -> dict[str, Any]:
+    controller: SessionController = request.app.state.session_controller
+    return session_payload(await controller.select_source(session_id, body.source_id))
 
 
 @router.get("/agent/providers")
@@ -518,9 +529,9 @@ async def safe_diagnostics(request: Request, database: DatabaseDependency) -> di
         source_platforms: dict[str, int] = {
             platform: count
             for platform, count in db.execute(
-                select(
-                    CaptureSourceRecord.platform, func.count(CaptureSourceRecord.source_id)
-                ).group_by(CaptureSourceRecord.platform)
+                select(CaptureSourceRecord.platform, func.count(CaptureSourceRecord.id)).group_by(
+                    CaptureSourceRecord.platform
+                )
             ).tuples()
         }
         run_states: dict[str, int] = {
@@ -640,12 +651,12 @@ def list_utterances(
     with database.transaction() as db:
         statement = select(UtteranceRecord).where(UtteranceRecord.session_id == session_id)
         if boundary is not None:
-            before_at, before_seq, before_id = boundary
+            before_offset, before_seq, before_id = boundary
             statement = statement.where(
                 or_(
-                    UtteranceRecord.first_observed_at < before_at,
+                    UtteranceRecord.first_session_offset_us < before_offset,
                     and_(
-                        UtteranceRecord.first_observed_at == before_at,
+                        UtteranceRecord.first_session_offset_us == before_offset,
                         or_(
                             UtteranceRecord.first_client_seq < before_seq,
                             and_(
@@ -659,7 +670,7 @@ def list_utterances(
         records = list(
             db.scalars(
                 statement.order_by(
-                    UtteranceRecord.first_observed_at.desc(),
+                    UtteranceRecord.first_session_offset_us.desc(),
                     UtteranceRecord.first_client_seq.desc(),
                     UtteranceRecord.id.desc(),
                 ).limit(limit + 1)
@@ -667,21 +678,23 @@ def list_utterances(
         )
         has_more = len(records) > limit
         records = records[:limit]
-        source_ids = {record.source_id for record in records}
-        sources = list(
-            db.scalars(
-                select(CaptureSourceRecord).where(CaptureSourceRecord.source_id.in_(source_ids))
-            )
-        )
+        epoch_ids = {record.source_epoch_id for record in records}
+        source_platforms = {
+            epoch_id: platform
+            for epoch_id, platform in db.execute(
+                select(SourceEpochRecord.id, CaptureSourceRecord.platform)
+                .join(CaptureSourceRecord, CaptureSourceRecord.id == SourceEpochRecord.source_id)
+                .where(SourceEpochRecord.id.in_(epoch_ids))
+            ).all()
+        }
     records.reverse()
-    source_platforms = {source.source_id: source.platform for source in sources}
     configured_names = own_speaker_names(cast(SettingsStore, request.app.state.settings).load())
     items = [
         utterance_payload(
             record,
             speaker_role=classify_speaker(
                 record.speaker,
-                source_platforms.get(record.source_id),
+                source_platforms.get(record.source_epoch_id),
                 configured_names,
             ),
         )
@@ -689,7 +702,7 @@ def list_utterances(
     ]
     next_cursor = (
         utterance_cursor(
-            records[0].first_observed_at,
+            records[0].first_session_offset_us,
             records[0].first_client_seq,
             records[0].id,
         )
@@ -819,15 +832,24 @@ def snapshot(request: Request, database: DatabaseDependency) -> dict[str, Any]:
         sources = list(
             db.scalars(
                 select(CaptureSourceRecord)
-                .where(
-                    or_(
-                        CaptureSourceRecord.connected.is_(True),
-                        CaptureSourceRecord.enabled.is_(True),
-                    )
-                )
+                .where(CaptureSourceRecord.connected.is_(True))
                 .order_by(CaptureSourceRecord.updated_at.desc())
             )
         )
+        paired_clients_by_id = {
+            item.id: item
+            for item in db.scalars(
+                select(PairedClientRecord).where(
+                    PairedClientRecord.id.in_({source.paired_client_id for source in sources})
+                )
+            )
+        }
+        source_ordinals: dict[str, int] = {}
+        next_ordinal_by_client: dict[str, int] = {}
+        for source in sorted(sources, key=lambda item: (item.created_at, item.id)):
+            ordinal = next_ordinal_by_client.get(source.paired_client_id, 0) + 1
+            next_ordinal_by_client[source.paired_client_id] = ordinal
+            source_ordinals[source.id] = ordinal
         buttons = list(
             db.scalars(select(ButtonDefinitionRecord).order_by(ButtonDefinitionRecord.created_at))
         )
@@ -836,7 +858,23 @@ def snapshot(request: Request, database: DatabaseDependency) -> dict[str, Any]:
         last_event_id = max(db.scalar(select(func.max(UiEventRecord.id))) or 0, pruned_through)
     return {
         "sessions": [session_payload(record) for record in sessions],
-        "sources": [source_payload(record) for record in sources],
+        "sources": [
+            source_payload(
+                record,
+                client_display_name=(
+                    paired_clients_by_id[record.paired_client_id].display_name
+                    if record.paired_client_id in paired_clients_by_id
+                    else "Browser extension"
+                ),
+                browser_family=(
+                    paired_clients_by_id[record.paired_client_id].browser_family
+                    if record.paired_client_id in paired_clients_by_id
+                    else "browser"
+                ),
+                tab_ordinal=source_ordinals[record.id],
+            )
+            for record in sources
+        ],
         "buttons": [button_payload(record) for record in buttons],
         "action_presets": ActionPresetService(database).list_all(),
         "last_event_id": last_event_id,
@@ -914,7 +952,7 @@ async def ui_websocket(websocket: WebSocket) -> None:
                 websocket.send_json(
                     {
                         "type": "ui.event",
-                        "protocol_version": 1,
+                        "protocol_version": 2,
                         "event_id": maximum,
                         "event_type": "resync_required",
                         "aggregate_id": None,

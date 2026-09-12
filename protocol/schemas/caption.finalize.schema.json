@@ -1,0 +1,102 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/caption.finalize.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "client_seq": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Client Seq",
+      "type": "integer"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Revision",
+      "type": "integer"
+    },
+    "session_offset_us": {
+      "maximum": 9223372036854775807,
+      "minimum": 0,
+      "title": "Session Offset Us",
+      "type": "integer"
+    },
+    "source_epoch_id": {
+      "format": "uuid",
+      "title": "Source Epoch Id",
+      "type": "string"
+    },
+    "source_id": {
+      "format": "uuid",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "source_time_us": {
+      "anyOf": [
+        {
+          "maximum": 9223372036854775807,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Time Us"
+    },
+    "speaker": {
+      "anyOf": [
+        {
+          "maxLength": 512,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Speaker"
+    },
+    "text": {
+      "maxLength": 20000,
+      "minLength": 1,
+      "title": "Text",
+      "type": "string"
+    },
+    "type": {
+      "const": "caption.finalize",
+      "title": "Type",
+      "type": "string"
+    },
+    "utterance_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Utterance Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "protocol_version",
+    "event_id",
+    "source_id",
+    "source_epoch_id",
+    "client_seq",
+    "utterance_id",
+    "revision",
+    "text",
+    "session_offset_us",
+    "type"
+  ],
+  "title": "CaptionFinalize",
+  "type": "object"
+}

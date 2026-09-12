@@ -20,17 +20,16 @@ class MemoryStorage implements StorageAreaLike {
 
 function event(sequence: number): BufferedEvent {
   return {
-    type: "utterance.upsert",
-    protocol_version: 1,
+    type: "caption.upsert",
+    protocol_version: 2,
     event_id: `00000000-0000-4000-8000-${String(sequence).padStart(12, "0")}`,
     source_id: "source",
     client_seq: sequence,
-    platform: "synthetic",
-    meeting_key: "harness",
+    source_epoch_id: "epoch",
     utterance_id: `utterance-${sequence}`,
     revision: 1,
     text: "hello",
-    observed_at: "2026-08-13T12:00:00.000Z",
+    session_offset_us: sequence,
   };
 }
 
@@ -112,6 +111,6 @@ describe("persistent event buffer", () => {
     }
     const snapshot = await buffer.snapshot();
     expect(snapshot.dead_letters).toHaveLength(20);
-    expect(snapshot.dead_letters[0]?.event_type).toBe("utterance.upsert");
+    expect(snapshot.dead_letters[0]?.event_type).toBe("caption.upsert");
   });
 });

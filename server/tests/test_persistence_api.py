@@ -19,20 +19,24 @@ from elsewise.persistence.models import (
     CaptionEventCounterRecord,
     CaptionEventDiagnosticRecord,
     CaptionEventTombstoneRecord,
+    CaptureSourceRecord,
+    PairedClientRecord,
     RecordingSegmentRecord,
+    SessionRecord,
+    SourceEpochRecord,
     UiEventRecord,
     UtteranceRecord,
 )
-from elsewise.protocol.models import SourceStatus, UtteranceFinalize, UtteranceUpsert
+from elsewise.protocol.models import CaptionFinalize, CaptionUpsert, SourceDiscovered
 from elsewise.services.action_presets import MAX_ACTION_PRESETS, ActionPresetService
 from elsewise.services.builtin_actions import BUILTIN_ACTIONS, BUILTIN_PRESETS
 from elsewise.services.buttons import MAX_ACTIONS, ButtonService
-from elsewise.services.capture import CaptureService
 from elsewise.services.errors import ServiceError
 from elsewise.services.sessions import SessionService, recover_after_restart
 from elsewise.settings.config import DEFAULT_INITIAL_PROMPTS
 from elsewise.settings.languages import SUPPORTED_LANGUAGES
 from elsewise.settings.paths import AppPaths
+from elsewise.sources.projectors.captions import CaptionProjector
 from fastapi.testclient import TestClient
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import func, inspect, select
@@ -97,22 +101,69 @@ def app_paths(tmp_path: Path) -> AppPaths:
     )
 
 
-def source_status(*, captions_status: str = "on_empty") -> SourceStatus:
-    return SourceStatus.model_validate(
+def source_status(*, health_status: str = "available") -> SourceDiscovered:
+    return SourceDiscovered.model_validate(
         {
-            "type": "source.status",
-            "protocol_version": 1,
+            "type": "source.discovered",
+            "protocol_version": 2,
             "event_id": str(uuid4()),
-            "source_id": "meet-document",
             "client_seq": 1,
+            "tab_instance_id": "tab-runtime-1",
+            "producer_epoch_id": "producer-1",
             "platform": "google_meet",
-            "enabled": True,
-            "captions_status": captions_status,
-            "speaker_detection": "available",
-            "meeting_key": "safe-meeting-key",
+            "activity_key": "opaque-activity-key",
+            "driver_id": "google_meet_captions",
+            "driver_version": "2.0.0",
+            "capabilities": ["captions"],
+            "health_status": health_status,
             "observed_at": NOW.isoformat(),
         }
     )
+
+
+def bind_source(database: Database, session_id: str) -> tuple[str, str]:
+    with database.transaction() as db:
+        session = db.get(SessionRecord, session_id)
+        assert session is not None
+        segment = db.scalar(
+            select(RecordingSegmentRecord).where(
+                RecordingSegmentRecord.session_id == session_id,
+                RecordingSegmentRecord.stopped_at.is_(None),
+            )
+        )
+        assert segment is not None
+        client = PairedClientRecord(
+            installation_id=str(uuid4()),
+            browser_family="chrome",
+            display_name="Test Chrome",
+            credential_digest="0" * 64,
+        )
+        db.add(client)
+        db.flush()
+        source = CaptureSourceRecord(
+            paired_client_id=client.id,
+            platform="google_meet",
+            driver_id="google_meet_captions",
+            driver_version="2.0.0",
+            tab_instance_id="tab-runtime-1",
+            activity_key="opaque-activity-key",
+            capabilities=["captions"],
+            health_status="available",
+        )
+        db.add(source)
+        db.flush()
+        epoch = SourceEpochRecord(
+            source_id=source.id,
+            session_id=session.id,
+            segment_id=segment.id,
+            producer_epoch_id="producer-1",
+            state="running",
+        )
+        db.add(epoch)
+        db.flush()
+        session.selected_source_id = source.id
+        session.source_status = "capturing"
+        return source.id, epoch.id
 
 
 def caption(
@@ -122,22 +173,23 @@ def caption(
     revision: int,
     text: str,
     event_id: str | None = None,
-) -> UtteranceUpsert | UtteranceFinalize:
-    model = UtteranceUpsert if message_type == "utterance.upsert" else UtteranceFinalize
+    source_id: str,
+    source_epoch_id: str,
+) -> CaptionUpsert | CaptionFinalize:
+    model = CaptionUpsert if message_type == "caption.upsert" else CaptionFinalize
     return model.model_validate(
         {
             "type": message_type,
-            "protocol_version": 1,
+            "protocol_version": 2,
             "event_id": event_id or str(uuid4()),
-            "source_id": "meet-document",
+            "source_id": source_id,
+            "source_epoch_id": source_epoch_id,
             "client_seq": sequence,
-            "platform": "google_meet",
-            "meeting_key": "safe-meeting-key",
             "utterance_id": "caption-1",
             "revision": revision,
             "speaker": "Иван",
             "text": text,
-            "observed_at": NOW.isoformat(),
+            "session_offset_us": sequence * 1_000,
         }
     )
 
@@ -163,30 +215,59 @@ def test_caption_commit_revision_finalize_and_reopen(tmp_path: Path) -> None:
     path = tmp_path / "capture.sqlite3"
     database = make_database(path)
     sessions = SessionService(database)
-    capture_service = CaptureService(database)
     session = sessions.create(title="Planning")
-    assert capture_service.update_source(source_status(), installation_id=str(uuid4())) == "applied"
     sessions.start(session.id, now=NOW)
+    source_id, epoch_id = bind_source(database, session.id)
+    projector = CaptionProjector(database)
 
     first_id = str(uuid4())
-    first = caption("utterance.upsert", sequence=2, revision=1, text="Нам", event_id=first_id)
-    assert capture_service.process_caption(first) == "applied"
-    assert capture_service.process_caption(first) == "duplicate"
+    first = caption(
+        "caption.upsert",
+        sequence=2,
+        revision=1,
+        text="Нам",
+        event_id=first_id,
+        source_id=source_id,
+        source_epoch_id=epoch_id,
+    )
+    assert projector.process(first) == "applied"
+    assert projector.process(first) == "duplicate"
     assert (
-        capture_service.process_caption(
-            caption("utterance.upsert", sequence=3, revision=1, text="Нам старое")
+        projector.process(
+            caption(
+                "caption.upsert",
+                sequence=3,
+                revision=1,
+                text="Нам старое",
+                source_id=source_id,
+                source_epoch_id=epoch_id,
+            )
         )
         == "stale"
     )
     assert (
-        capture_service.process_caption(
-            caption("utterance.upsert", sequence=4, revision=2, text="Нам нужно")
+        projector.process(
+            caption(
+                "caption.upsert",
+                sequence=4,
+                revision=2,
+                text="Нам нужно",
+                source_id=source_id,
+                source_epoch_id=epoch_id,
+            )
         )
         == "applied"
     )
     assert (
-        capture_service.process_caption(
-            caption("utterance.finalize", sequence=5, revision=2, text="Нам нужно")
+        projector.process(
+            caption(
+                "caption.finalize",
+                sequence=5,
+                revision=2,
+                text="Нам нужно",
+                source_id=source_id,
+                source_epoch_id=epoch_id,
+            )
         )
         == "applied"
     )
@@ -204,7 +285,7 @@ def test_caption_commit_revision_finalize_and_reopen(tmp_path: Path) -> None:
                 counters.get(record.processing_result, 0) + record.count
             )
         assert counters == {"applied": 3, "stale": 1}
-        assert db.scalar(select(func.count(UiEventRecord.id))) == 6
+        assert db.scalar(select(func.count(UiEventRecord.id))) == 5
     database.dispose()
 
     reopened = make_database(path)
@@ -212,7 +293,7 @@ def test_caption_commit_revision_finalize_and_reopen(tmp_path: Path) -> None:
     assert SessionService(reopened).utterances(session.id)[0].text == "Нам нужно"
     recover_after_restart(reopened)
     assert SessionService(reopened).get(session.id).recording_status == "stopped"
-    assert SessionService(reopened).get(session.id).capture_status == "no_source"
+    assert SessionService(reopened).get(session.id).source_status == "no_source"
     reopened.dispose()
 
 
@@ -318,7 +399,6 @@ def test_session_editability_follows_first_start_and_running_state(tmp_path: Pat
 def test_rest_snapshot_outbox_and_websocket_replay(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'api.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(),
     )
@@ -328,14 +408,17 @@ def test_rest_snapshot_outbox_and_websocket_replay(tmp_path: Path) -> None:
         session_id = created.json()["id"]
         assert client.post(f"/api/sessions/{session_id}/start").status_code == 200
 
-        capture_service = CaptureService(app.state.database)
+        source_id, epoch_id = bind_source(app.state.database, session_id)
         assert (
-            capture_service.update_source(source_status(), installation_id=str(uuid4()))
-            == "applied"
-        )
-        assert (
-            capture_service.process_caption(
-                caption("utterance.upsert", sequence=2, revision=1, text="Live text")
+            CaptionProjector(app.state.database).process(
+                caption(
+                    "caption.upsert",
+                    sequence=2,
+                    revision=1,
+                    text="Live text",
+                    source_id=source_id,
+                    source_epoch_id=epoch_id,
+                )
             )
             == "applied"
         )
@@ -363,7 +446,7 @@ def test_rest_snapshot_outbox_and_websocket_replay(tmp_path: Path) -> None:
         with client.websocket_connect("/ws/ui?since=0", headers=websocket_headers) as websocket:
             first_event = websocket.receive_json()
             assert first_event["event_id"] == 1
-            assert first_event["protocol_version"] == 1
+            assert first_event["protocol_version"] == 2
         assert app.state.diagnostics.snapshot()["ui_clients_connected"] == 0
         with client.websocket_connect(
             "/ws/ui?since=999999", headers=websocket_headers
@@ -377,7 +460,6 @@ def test_session_prompt_and_working_directory_are_validated_before_start(
 ) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'session-editor.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(),
     )
@@ -465,7 +547,6 @@ def test_french_prompts_and_global_permission_defaults_seed_new_sessions(
     )
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'permission-defaults.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=settings_path,
         agent_provider=FakeAgentProvider(),
     )
@@ -510,7 +591,6 @@ def test_french_prompts_and_global_permission_defaults_seed_new_sessions(
 def test_global_theme_validation_persistence_and_settings_event(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'theme.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(),
     )
@@ -529,7 +609,6 @@ def test_global_theme_validation_persistence_and_settings_event(tmp_path: Path) 
 def test_global_initial_prompts_can_be_reset_to_defaults(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'prompt-reset.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(),
     )
@@ -561,7 +640,6 @@ def test_all_supported_session_languages_persist_and_unsupported_codes_fail(
 ) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'languages.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(),
     )
@@ -599,7 +677,6 @@ def test_agent_provider_defaults_validation_lock_and_providers_api(tmp_path: Pat
     claude = FakeAgentProvider(chunks=("claude",))
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'providers.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=AgentProviderRegistry({"codex": codex, "claude": claude}),
     )
@@ -719,7 +796,6 @@ def test_agent_provider_defaults_validation_lock_and_providers_api(tmp_path: Pat
 def test_unavailable_agent_executable_is_saved_and_reported(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'executable.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=AgentProviderRegistry(
             {"codex": FakeAgentProvider(), "claude": FakeAgentProvider()}
@@ -751,7 +827,6 @@ def test_fixture_serialization_is_bounded_and_safe() -> None:
 def test_session_update_segments_and_confirmed_delete(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'crud.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(),
     )
@@ -780,7 +855,6 @@ def test_session_update_segments_and_confirmed_delete(tmp_path: Path) -> None:
 def test_agent_streaming_is_visible_to_ui_test_client(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'stream.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(chunks=("streamed",), delay=0.03),
     )
@@ -804,7 +878,6 @@ def test_agent_streaming_is_visible_to_ui_test_client(tmp_path: Path) -> None:
 def test_settings_button_crud_and_run_snapshot_are_immutable(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'buttons.sqlite3'}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(chunks=("answer",), delay=0.1),
     )
@@ -960,94 +1033,6 @@ def test_settings_button_crud_and_run_snapshot_are_immutable(tmp_path: Path) -> 
 
 
 @pytest.mark.integration
-def test_source_switches_meet_to_teams_before_start_but_not_while_recording(
-    tmp_path: Path,
-) -> None:
-    database = make_database(tmp_path / "source-switch.sqlite3")
-    capture_service = CaptureService(database)
-    installation = str(uuid4())
-
-    def status(source_id: str, platform: str, sequence: int) -> SourceStatus:
-        return SourceStatus.model_validate(
-            {
-                "type": "source.status",
-                "protocol_version": 1,
-                "event_id": str(uuid4()),
-                "source_id": source_id,
-                "client_seq": sequence,
-                "platform": platform,
-                "enabled": True,
-                "captions_status": "on_empty",
-                "speaker_detection": "available",
-                "meeting_key": f"{platform}-meeting",
-                "observed_at": NOW.isoformat(),
-            }
-        )
-
-    assert (
-        capture_service.update_source(
-            status("meet", "google_meet", 1), installation_id=installation
-        )
-        == "applied"
-    )
-    assert (
-        capture_service.update_source(
-            status("teams", "microsoft_teams", 2), installation_id=installation
-        )
-        == "applied"
-    )
-    session = SessionService(database).create(title="Switch")
-    started = SessionService(database).start(session.id)
-    assert started.active_source_id == "teams"
-    assert (
-        capture_service.update_source(
-            status("meet", "google_meet", 3), installation_id=installation
-        )
-        == "source_switch_rejected"
-    )
-    database.dispose()
-
-
-@pytest.mark.integration
-def test_same_tab_document_reload_rebinds_the_running_session(tmp_path: Path) -> None:
-    database = make_database(tmp_path / "document-reload.sqlite3")
-    capture_service = CaptureService(database)
-    installation = str(uuid4())
-
-    def document_status(source_id: str, document_id: str, meeting: str) -> SourceStatus:
-        return SourceStatus.model_validate(
-            {
-                "type": "source.status",
-                "protocol_version": 1,
-                "event_id": str(uuid4()),
-                "source_id": source_id,
-                "tab_id": 17,
-                "document_id": document_id,
-                "client_seq": 1,
-                "platform": "google_meet",
-                "enabled": True,
-                "captions_status": "on_empty",
-                "meeting_key": meeting,
-                "observed_at": NOW.isoformat(),
-            }
-        )
-
-    first = document_status("installation:17:doc-1", "doc-1", "same-meeting")
-    assert capture_service.update_source(first, installation_id=installation) == "applied"
-    session = SessionService(database).create(title="Reload")
-    SessionService(database).start(session.id)
-    second = document_status("installation:17:doc-2", "doc-2", "same-meeting")
-    assert capture_service.update_source(second, installation_id=installation) == "applied"
-    assert SessionService(database).get(session.id).active_source_id == second.source_id
-    different = document_status("installation:17:doc-3", "doc-3", "different-meeting")
-    assert (
-        capture_service.update_source(different, installation_id=installation)
-        == "source_switch_rejected"
-    )
-    database.dispose()
-
-
-@pytest.mark.integration
 def test_long_session_snapshot_is_bounded_and_history_is_cursor_paginated(
     tmp_path: Path,
 ) -> None:
@@ -1059,6 +1044,7 @@ def test_long_session_snapshot_is_bounded_and_history_is_cursor_paginated(
     database.migrate()
     session = SessionService(database).create(title="Long")
     SessionService(database).start(session.id, now=NOW)
+    _, epoch_id = bind_source(database, session.id)
     with database.transaction() as db:
         segment = db.scalar(
             select(RecordingSegmentRecord).where(RecordingSegmentRecord.session_id == session.id)
@@ -1069,14 +1055,19 @@ def test_long_session_snapshot_is_bounded_and_history_is_cursor_paginated(
                 UtteranceRecord(
                     session_id=session.id,
                     segment_id=segment.id,
-                    source_id="long-source",
+                    source_epoch_id=epoch_id,
                     utterance_id=f"long-{index}",
                     revision=1,
                     speaker="Speaker",
                     text=f"bounded secret transcript {index}",
                     final=True,
-                    first_observed_at=NOW + timedelta(seconds=index),
-                    last_observed_at=NOW + timedelta(seconds=index),
+                    origin_kind="browser_captions",
+                    origin_confidence=1.0,
+                    projection_version=1,
+                    first_session_offset_us=index * 1_000_000,
+                    last_session_offset_us=index * 1_000_000,
+                    first_received_at=NOW + timedelta(seconds=index),
+                    last_received_at=NOW + timedelta(seconds=index),
                     first_client_seq=index,
                     last_client_seq=index,
                 )
@@ -1134,7 +1125,6 @@ def test_long_session_snapshot_is_bounded_and_history_is_cursor_paginated(
 
     app = create_app(
         database_url=f"sqlite:///{database_path}",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         agent_provider=FakeAgentProvider(),
         app_paths=app_paths(tmp_path),

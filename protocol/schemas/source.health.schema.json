@@ -1,0 +1,85 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/source.health.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "client_seq": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Client Seq",
+      "type": "integer"
+    },
+    "dropped_event_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Dropped Event Count",
+      "type": "integer"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "health_status": {
+      "enum": ["available", "waiting", "degraded", "unavailable", "failed"],
+      "title": "Health Status",
+      "type": "string"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "source_epoch_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Epoch Id"
+    },
+    "source_id": {
+      "format": "uuid",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "type": {
+      "const": "source.health",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "protocol_version",
+    "event_id",
+    "client_seq",
+    "source_id",
+    "health_status",
+    "observed_at"
+  ],
+  "title": "SourceHealth",
+  "type": "object"
+}

@@ -190,7 +190,7 @@ export class MicrosoftTeamsAdapter implements PlatformAdapter {
     }
   }
 
-  stop(): void {
+  stop(finalize = false): void {
     this.#rootObserver?.disconnect();
     this.#lifecycleObserver?.disconnect();
     this.#rootObserver = null;
@@ -198,6 +198,7 @@ export class MicrosoftTeamsAdapter implements PlatformAdapter {
     for (const state of this.#segments.values()) {
       if (state.idleTimer) clearTimeout(state.idleTimer);
       if (state.removalTimer) clearTimeout(state.removalTimer);
+      if (finalize) this.#finalize(state);
     }
     this.#segments.clear();
     this.#root = null;

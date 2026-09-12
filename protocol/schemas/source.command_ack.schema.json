@@ -1,0 +1,59 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/source.command_ack.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "command_id": {
+      "format": "uuid",
+      "title": "Command Id",
+      "type": "string"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "result": {
+      "enum": ["started", "finalized", "failed"],
+      "title": "Result",
+      "type": "string"
+    },
+    "source_epoch_id": {
+      "format": "uuid",
+      "title": "Source Epoch Id",
+      "type": "string"
+    },
+    "source_id": {
+      "format": "uuid",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "type": {
+      "const": "source.command_ack",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "protocol_version",
+    "command_id",
+    "source_id",
+    "source_epoch_id",
+    "result"
+  ],
+  "title": "SourceCommandAck",
+  "type": "object"
+}

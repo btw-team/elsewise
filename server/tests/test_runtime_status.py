@@ -55,7 +55,6 @@ def test_runtime_status_api_and_websocket_are_bounded(tmp_path: Path) -> None:
     paths = app_paths(tmp_path)
     app = create_app(
         database_url="sqlite://",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
         app_paths=paths,
         agent_provider=AgentProviderRegistry(
@@ -71,6 +70,7 @@ def test_runtime_status_api_and_websocket_are_bounded(tmp_path: Path) -> None:
         assert set(payload) == {
             "server",
             "connections",
+            "pairing",
             "session",
             "source",
             "agent_work",
@@ -78,6 +78,7 @@ def test_runtime_status_api_and_websocket_are_bounded(tmp_path: Path) -> None:
             "agents",
         }
         assert payload["session"] is None
+        assert payload["pairing"] == {"pending_requests": [], "clients": []}
         assert payload["settings"] == {"ui_language": "en", "ui_theme": "dark"}
         assert set(payload["agents"]) == {"codex", "claude"}
         assert forbidden.isdisjoint(collect_keys(payload))

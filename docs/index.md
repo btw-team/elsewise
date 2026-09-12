@@ -15,7 +15,7 @@ This documentation covers the free and open-source edition published in the
   platform behavior, and updates.
 - [Getting started](getting-started.md) - first launch, extension pairing, and the
   first recorded session.
-- [Browser extension pairing](pairing.md) - token creation, copy, manual save,
+- [Browser extension pairing](pairing.md) - request approval, client management,
   regeneration, and reconnect behavior.
 - [Meeting capture](meeting-capture.md) - Meet, Teams, Zoom Web, speakers, and
   capture lifecycle.
@@ -33,6 +33,7 @@ This documentation covers the free and open-source edition published in the
 - [Contributing](../CONTRIBUTING.md)
 - [Development setup](development/setup.md)
 - [Architecture](development/architecture.md)
+- [Phase 1 Session/Source ADR](development/adr-phase1-session-source.md)
 - [Extension adapters](development/extension-adapters.md)
 - [Testing strategy](development/testing.md)
 - [Packaging and releases](development/packaging-and-releases.md)

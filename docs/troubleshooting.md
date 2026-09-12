@@ -8,23 +8,19 @@ to it. Use `elsewise logs --follow` for startup diagnostics.
 
 ## Extension is not paired
 
-1. Open **Browser extension pairing** in the web GUI or launcher Settings.
-2. Copy the saved token and replace the value in the extension popup.
-3. If you entered a custom value, select **Save** before copying it.
-4. If the values still do not match, select **Regenerate**, then copy the replacement
-   into every extension installation. Regeneration immediately invalidates the
-   previous token.
-5. Confirm that the extension is connecting to `127.0.0.1:38473`, not another host
+1. Start the Elsewise server and select **Pair** in the extension popup.
+2. Approve the pending request in web GUI or launcher Settings before it expires.
+3. If a previous client was revoked, start a new pairing request.
+4. Confirm that the extension is connecting to `127.0.0.1:38473`, not another host
    or port.
 
-The launcher can display or create the token while the server is stopped. The web
-GUI requires the server to be running. A normal restart preserves the current token;
-it does not require pairing again. See [Browser extension pairing](pairing.md).
+Pairing requires the server to be running. A normal restart preserves each paired
+client credential. See [Browser extension pairing](pairing.md).
 
 ## Captions are not detected
 
 1. Enable captions in Meet, Teams, or Zoom Web.
-2. Open the extension popup in the actual meeting tab and enable capture.
+2. Start a Session in the web GUI and check that the meeting tab is selected.
 3. Check the popup platform, caption, source, and pending-event states.
 4. Reload an unpacked extension after rebuilding it, then reload the meeting tab.
 5. Use redacted diagnostics before collecting a sanitized fixture.

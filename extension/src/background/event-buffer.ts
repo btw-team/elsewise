@@ -2,14 +2,10 @@ import {
   MAX_EXTENSION_BUFFER_BYTES,
   MAX_EXTENSION_BUFFER_EVENTS,
 } from "../protocol/limits";
-import type {
-  SourceStatus,
-  UtteranceFinalize,
-  UtteranceUpsert,
-} from "../protocol/models";
+import type { BufferedEvidence } from "../protocol/models";
 import type { StorageAreaLike } from "./storage";
 
-export type BufferedEvent = SourceStatus | UtteranceUpsert | UtteranceFinalize;
+export type BufferedEvent = BufferedEvidence;
 
 export interface BufferedEnvelope {
   event: BufferedEvent;
@@ -31,14 +27,14 @@ export interface BufferSnapshot {
   full: boolean;
 }
 
-interface StoredBufferV2 {
-  schema_version: 2;
+interface StoredBufferV3 {
+  schema_version: 3;
   events: BufferedEnvelope[];
   dead_letters: DeadLetter[];
   dropped: number;
 }
 
-const STORAGE_KEY = "ingestBufferV2";
+const STORAGE_KEY = "ingestBufferV3";
 const MAX_DEAD_LETTERS = 20;
 
 export class PersistentEventBuffer {
@@ -54,26 +50,26 @@ export class PersistentEventBuffer {
     return this.#serialize(async () => this.#snapshot(await this.#read()));
   }
 
-  async #read(): Promise<StoredBufferV2> {
+  async #read(): Promise<StoredBufferV3> {
     const result = await this.storage.get(STORAGE_KEY);
-    const stored = result[STORAGE_KEY] as StoredBufferV2 | undefined;
-    return stored?.schema_version === 2 && Array.isArray(stored.events)
+    const stored = result[STORAGE_KEY] as StoredBufferV3 | undefined;
+    return stored?.schema_version === 3 && Array.isArray(stored.events)
       ? {
-          schema_version: 2,
+          schema_version: 3,
           events: [...stored.events],
           dead_letters: Array.isArray(stored.dead_letters)
             ? [...stored.dead_letters].slice(-MAX_DEAD_LETTERS)
             : [],
           dropped: stored.dropped ?? 0,
         }
-      : { schema_version: 2, events: [], dead_letters: [], dropped: 0 };
+      : { schema_version: 3, events: [], dead_letters: [], dropped: 0 };
   }
 
   #bytes(events: BufferedEnvelope[]): number {
     return new TextEncoder().encode(JSON.stringify(events)).byteLength;
   }
 
-  #snapshot(state: StoredBufferV2): BufferSnapshot {
+  #snapshot(state: StoredBufferV3): BufferSnapshot {
     const pendingBytes = this.#bytes(state.events);
     return {
       events: [...state.events],
@@ -90,7 +86,7 @@ export class PersistentEventBuffer {
   }
 
   #deadLetter(
-    state: StoredBufferV2,
+    state: StoredBufferV3,
     event: BufferedEvent,
     reasonCode: string,
   ): void {
@@ -113,7 +109,7 @@ export class PersistentEventBuffer {
       const state = await this.#read();
       const envelope: BufferedEnvelope = {
         event,
-        session_id: event.type === "source.status" ? null : sessionId,
+        session_id: event.type.startsWith("source.") ? null : sessionId,
       };
       const candidate = [...state.events, envelope];
       if (
@@ -160,7 +156,7 @@ export class PersistentEventBuffer {
       const state = await this.#read();
       const kept: BufferedEnvelope[] = [];
       for (const envelope of state.events) {
-        if (envelope.event.type === "source.status") {
+        if (envelope.event.type.startsWith("source.")) {
           kept.push(envelope);
         } else if (envelope.session_id === null) {
           this.#deadLetter(state, envelope.event, "missing_session_scope");

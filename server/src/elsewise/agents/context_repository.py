@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -8,6 +7,7 @@ from elsewise.agents.prompts import ContextStrategy, format_utterance
 from elsewise.persistence.models import (
     AgentThreadRecord,
     CaptureSourceRecord,
+    SourceEpochRecord,
     UtteranceRecord,
 )
 from elsewise.services.speaker_identity import classify_speaker, own_speaker_names
@@ -47,7 +47,7 @@ class AgentContextRepository:
                 select(UtteranceRecord)
                 .where(UtteranceRecord.session_id == session_id)
                 .order_by(
-                    UtteranceRecord.first_observed_at.desc(),
+                    UtteranceRecord.first_session_offset_us.desc(),
                     UtteranceRecord.first_client_seq.desc(),
                     UtteranceRecord.id.desc(),
                 )
@@ -55,19 +55,19 @@ class AgentContextRepository:
             )
             if latest is not None:
                 statement = statement.where(
-                    UtteranceRecord.last_observed_at
-                    >= latest.last_observed_at - timedelta(minutes=value or 1)
+                    UtteranceRecord.last_session_offset_us
+                    >= latest.last_session_offset_us - (value or 1) * 60 * 1_000_000
                 )
         elif strategy == "since_previous_turn" and thread.last_completed_boundary:
             boundary = self.db.get(UtteranceRecord, thread.last_completed_boundary)
             if boundary is not None:
                 statement = statement.where(
-                    UtteranceRecord.last_observed_at
-                    >= boundary.last_observed_at - timedelta(minutes=value or 1)
+                    UtteranceRecord.last_session_offset_us
+                    >= boundary.last_session_offset_us - (value or 1) * 60 * 1_000_000
                 )
 
         descending = statement.order_by(
-            UtteranceRecord.first_observed_at.desc(),
+            UtteranceRecord.first_session_offset_us.desc(),
             UtteranceRecord.first_client_seq.desc(),
             UtteranceRecord.id.desc(),
         )
@@ -87,19 +87,21 @@ class AgentContextRepository:
             chunk = list(self.db.scalars(descending.offset(offset).limit(chunk_size)))
             if not chunk:
                 break
-            source_ids = {utterance.source_id for utterance in chunk}
+            epoch_ids = {utterance.source_epoch_id for utterance in chunk}
             platforms: dict[str, str] = {
-                source_id: platform
-                for source_id, platform in self.db.execute(
-                    select(CaptureSourceRecord.source_id, CaptureSourceRecord.platform).where(
-                        CaptureSourceRecord.source_id.in_(source_ids)
+                epoch_id: platform
+                for epoch_id, platform in self.db.execute(
+                    select(SourceEpochRecord.id, CaptureSourceRecord.platform)
+                    .join(
+                        CaptureSourceRecord, CaptureSourceRecord.id == SourceEpochRecord.source_id
                     )
+                    .where(SourceEpochRecord.id.in_(epoch_ids))
                 ).all()
             }
             for utterance in chunk:
                 role = classify_speaker(
                     utterance.speaker,
-                    platforms.get(utterance.source_id),
+                    platforms.get(utterance.source_epoch_id),
                     self.configured_names,
                 )
                 roles[utterance.id] = role

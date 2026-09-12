@@ -53,23 +53,20 @@ function applyGlobalEvent(
         );
     return { ...snapshot, sessions, last_event_id: event.event_id };
   }
-  if (event.event_type === "source.status") {
-    const id = String(payload.source_id ?? event.aggregate_id ?? "");
-    const previous = snapshot.sources.find((source) => source.source_id === id);
+  if (event.event_type === "source.changed") {
+    const id = String(payload.id ?? event.aggregate_id ?? "");
+    const previous = snapshot.sources.find((source) => source.id === id);
     const source = {
       connected: true,
-      meeting_title: null,
-      meeting_key: null,
-      tab_id: null,
-      document_id: null,
+      available: true,
+      health_status: "unknown",
       last_event_at: event.created_at,
-      speaker_detection: null,
       ...previous,
       ...payload,
     } as CaptureSource;
     return {
       ...snapshot,
-      sources: upsert(snapshot.sources, id, source, (item) => item.source_id),
+      sources: upsert(snapshot.sources, id, source, (item) => item.id),
       last_event_id: event.event_id,
     };
   }

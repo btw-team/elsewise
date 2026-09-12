@@ -1,4 +1,4 @@
-export const PROTOCOL_VERSION = 1 as const;
+export const PROTOCOL_VERSION = 2 as const;
 export const MAX_INGEST_MESSAGE_BYTES = 64 * 1024;
 export const MAX_CAPTION_TEXT_LENGTH = 20_000;
 export const MAX_SPEAKER_LENGTH = 512;

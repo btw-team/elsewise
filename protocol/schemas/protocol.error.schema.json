@@ -1,31 +1,72 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://elsewise.local/protocol/v1/protocol.error.schema.json",
-  "title": "Protocol error",
-  "type": "object",
+  "$id": "https://elsewise.local/protocol/v2/protocol.error.schema.json",
   "additionalProperties": false,
-  "required": ["type", "protocol_version", "code", "message", "recoverable"],
   "properties": {
-    "type": { "const": "protocol.error" },
-    "protocol_version": { "const": 1 },
-    "event_id": { "type": "string", "format": "uuid" },
-    "client_seq": { "type": "integer", "minimum": 0 },
     "code": {
       "enum": [
         "invalid_json",
         "invalid_message",
-        "unsupported_protocol_version",
+        "incompatible_protocol",
         "unauthorized",
+        "client_revoked",
         "hello_required",
         "unknown_message_type",
         "message_too_large",
         "rate_limited",
-        "source_switch_rejected",
+        "source_not_bound",
         "internal_error"
-      ]
+      ],
+      "title": "Code",
+      "type": "string"
     },
-    "message": { "type": "string", "minLength": 1, "maxLength": 1024 },
-    "recoverable": { "type": "boolean" },
-    "details": { "type": "object", "maxProperties": 32 }
-  }
+    "details": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Details"
+    },
+    "event_id": {
+      "anyOf": [
+        {
+          "format": "uuid",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Event Id"
+    },
+    "message": {
+      "maxLength": 1024,
+      "minLength": 1,
+      "title": "Message",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "recoverable": {
+      "title": "Recoverable",
+      "type": "boolean"
+    },
+    "type": {
+      "const": "protocol.error",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": ["type", "protocol_version", "code", "message", "recoverable"],
+  "title": "ProtocolError",
+  "type": "object"
 }

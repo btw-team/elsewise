@@ -1,0 +1,25 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/pairing.error.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Code",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "type": {
+      "const": "pairing.error",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": ["type", "protocol_version", "code"],
+  "title": "PairingError",
+  "type": "object"
+}

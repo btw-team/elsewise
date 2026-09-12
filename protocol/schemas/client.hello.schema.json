@@ -1,28 +1,56 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://elsewise.local/protocol/v1/client.hello.schema.json",
-  "title": "Client hello",
-  "type": "object",
+  "$id": "https://elsewise.local/protocol/v2/client.hello.schema.json",
   "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 32,
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "credential": {
+      "maxLength": 256,
+      "minLength": 48,
+      "title": "Credential",
+      "type": "string"
+    },
+    "extension_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Extension Version",
+      "type": "string"
+    },
+    "installation_id": {
+      "format": "uuid",
+      "title": "Installation Id",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "role": {
+      "const": "extension",
+      "title": "Role",
+      "type": "string"
+    },
+    "type": {
+      "const": "client.hello",
+      "title": "Type",
+      "type": "string"
+    }
+  },
   "required": [
     "type",
     "protocol_version",
     "role",
-    "token",
+    "credential",
     "installation_id",
     "extension_version"
   ],
-  "properties": {
-    "type": { "const": "client.hello" },
-    "protocol_version": { "const": 1 },
-    "role": { "const": "extension" },
-    "token": { "type": "string", "minLength": 16, "maxLength": 4096 },
-    "installation_id": { "type": "string", "format": "uuid" },
-    "extension_version": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 64,
-      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"
-    }
-  }
+  "title": "ClientHello",
+  "type": "object"
 }

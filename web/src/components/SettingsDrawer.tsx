@@ -1,5 +1,4 @@
 import { ArrowsCounterClockwise } from "@phosphor-icons/react/ArrowsCounterClockwise";
-import { Copy } from "@phosphor-icons/react/Copy";
 import { FloppyDisk } from "@phosphor-icons/react/FloppyDisk";
 import { FormEvent, useEffect, useState } from "react";
 
@@ -18,7 +17,8 @@ import type {
   ContextStrategy,
   AgentProviderHealth,
   GlobalSettings,
-  PairingSettings,
+  PairedClient,
+  PairingRequest,
   SupportedLanguage,
 } from "../types";
 import type { UiTheme } from "../theme";
@@ -45,48 +45,6 @@ const emptySettings: GlobalSettings = {
   default_allow_workspace_write: false,
   default_allow_network: false,
 };
-
-const emptyPairing: PairingSettings = {
-  token: "",
-  masked_token: "",
-  created_at: "",
-  generation: 0,
-};
-
-async function writeClipboard(text: string): Promise<void> {
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(text);
-      return;
-    }
-  } catch {
-    // Some browsers expose the Clipboard API on loopback pages but still
-    // reject it because of focus or permission policy. Fall back to the
-    // synchronous selection-based copy below.
-  }
-
-  const previousFocus = document.activeElement;
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.readOnly = true;
-  textarea.setAttribute("aria-hidden", "true");
-  Object.assign(textarea.style, {
-    position: "fixed",
-    inset: "0 auto auto -9999px",
-    opacity: "0",
-    pointerEvents: "none",
-  });
-  document.body.append(textarea);
-  textarea.focus();
-  textarea.select();
-  textarea.setSelectionRange(0, text.length);
-  try {
-    if (!document.execCommand("copy")) throw new Error("Clipboard copy failed");
-  } finally {
-    textarea.remove();
-    if (previousFocus instanceof HTMLElement) previousFocus.focus();
-  }
-}
 
 function ContextStrategyOptions({ t }: { t: Translator }) {
   return (
@@ -123,7 +81,9 @@ export function SettingsDrawer({
   const dialog = useModalFocus(onClose);
   const [settings, setSettings] = useState(emptySettings);
   const [providers, setProviders] = useState<AgentProviderHealth[]>([]);
-  const [pairing, setPairing] = useState(emptyPairing);
+  const [pairingRequests, setPairingRequests] = useState<PairingRequest[]>([]);
+  const [pairedClients, setPairedClients] = useState<PairedClient[]>([]);
+  const [clientNames, setClientNames] = useState<Record<string, string>>({});
   const [pairingBusy, setPairingBusy] = useState(false);
   const [resettingInitialPrompts, setResettingInitialPrompts] = useState(false);
 
@@ -136,19 +96,31 @@ export function SettingsDrawer({
       .agentProviders()
       .then((payload) => setProviders(payload.providers))
       .catch(() => setProviders([]));
-    void api
-      .pairing()
-      .then((payload) => setPairing({ ...emptyPairing, ...payload }))
+    void Promise.all([api.pairingRequests(), api.pairedClients()])
+      .then(([requests, clients]) => {
+        setPairingRequests(requests);
+        setPairedClients(clients);
+        setClientNames(
+          Object.fromEntries(
+            clients.map((client) => [client.id, client.display_name]),
+          ),
+        );
+      })
       .catch((caught: unknown) => onError(apiErrorMessage(caught, t)));
   }, [onError, t]);
 
-  async function savePairing(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function decidePairing(requestId: string, approve: boolean) {
     setPairingBusy(true);
     try {
-      const updated = await api.updatePairing(pairing.token);
-      setPairing(updated);
-      onSuccess(t("pairingSaved"));
+      if (approve) await api.approvePairing(requestId);
+      else await api.denyPairing(requestId);
+      const [requests, clients] = await Promise.all([
+        api.pairingRequests(),
+        api.pairedClients(),
+      ]);
+      setPairingRequests(requests);
+      setPairedClients(clients);
+      onSuccess(t(approve ? "pairingApproved" : "pairingDenied"));
     } catch (caught) {
       onError(apiErrorMessage(caught, t));
     } finally {
@@ -156,12 +128,12 @@ export function SettingsDrawer({
     }
   }
 
-  async function regeneratePairing() {
+  async function revokeClient(clientId: string) {
     setPairingBusy(true);
     try {
-      const updated = await api.regeneratePairing();
-      setPairing(updated);
-      onSuccess(t("pairingRegenerated"));
+      await api.revokePairedClient(clientId);
+      setPairedClients(await api.pairedClients());
+      onSuccess(t("pairingRevoked"));
     } catch (caught) {
       onError(apiErrorMessage(caught, t));
     } finally {
@@ -169,12 +141,20 @@ export function SettingsDrawer({
     }
   }
 
-  async function copyPairingToken() {
+  async function renameClient(clientId: string) {
+    const displayName = clientNames[clientId]?.trim();
+    if (!displayName) return;
+    setPairingBusy(true);
     try {
-      await writeClipboard(pairing.token);
-      onSuccess(t("pairingCopied"));
-    } catch {
-      onError(t("requestFailed"));
+      const updated = await api.renamePairedClient(clientId, displayName);
+      setPairedClients((clients) =>
+        clients.map((client) => (client.id === clientId ? updated : client)),
+      );
+      onSuccess(t("pairingRenamed"));
+    } catch (caught) {
+      onError(apiErrorMessage(caught, t));
+    } finally {
+      setPairingBusy(false);
     }
   }
 
@@ -377,55 +357,65 @@ export function SettingsDrawer({
                 </div>
               </div>
             </section>
-            <form
-              className="pairing-settings"
-              onSubmit={(event) => void savePairing(event)}
-            >
+            <section className="pairing-settings">
               <h3>{t("browserExtensionPairing")}</h3>
               <p className="settings-hint">{t("pairingHint")}</p>
-              <label>
-                {t("pairingToken")}
-                <input
-                  className="pairing-token-input"
-                  autoComplete="off"
-                  spellCheck={false}
-                  minLength={16}
-                  maxLength={4096}
-                  value={pairing.token}
-                  onChange={(event) =>
-                    setPairing((current) => ({
-                      ...current,
-                      token: event.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <div className="pairing-token-actions">
-                <button
-                  type="button"
-                  disabled={pairingBusy || !pairing.token}
-                  onClick={() => void copyPairingToken()}
-                >
-                  <Copy aria-hidden="true" weight="regular" />
-                  {t("copyToken")}
-                </button>
-                <button
-                  type="button"
-                  disabled={pairingBusy}
-                  onClick={() => void regeneratePairing()}
-                >
-                  <ArrowsCounterClockwise aria-hidden="true" weight="regular" />
-                  {t("regenerateToken")}
-                </button>
-                <button
-                  className="settings-save-button"
-                  disabled={pairingBusy || pairing.token.trim().length < 16}
-                >
-                  <FloppyDisk aria-hidden="true" weight="regular" />
-                  {t("save")}
-                </button>
+              <div className="pairing-list">
+                {pairingRequests.map((request) => (
+                  <div key={request.id} className="pairing-row">
+                    <span>
+                      {request.display_name} · {request.browser_family}
+                    </span>
+                    <button
+                      disabled={pairingBusy}
+                      onClick={() => void decidePairing(request.id, true)}
+                    >
+                      {t("allow")}
+                    </button>
+                    <button
+                      disabled={pairingBusy}
+                      onClick={() => void decidePairing(request.id, false)}
+                    >
+                      {t("deny")}
+                    </button>
+                  </div>
+                ))}
+                {pairingRequests.length === 0 && (
+                  <p>{t("noPairingRequests")}</p>
+                )}
+                {pairedClients.map((client) => (
+                  <div key={client.id} className="pairing-row">
+                    <span>
+                      {client.browser_family} · {client.status}
+                    </span>
+                    <input
+                      aria-label={`${t("pairedClientName")} · ${client.browser_family}`}
+                      value={clientNames[client.id] ?? client.display_name}
+                      onChange={(event) =>
+                        setClientNames((names) => ({
+                          ...names,
+                          [client.id]: event.target.value,
+                        }))
+                      }
+                    />
+                    <button
+                      disabled={pairingBusy}
+                      onClick={() => void renameClient(client.id)}
+                    >
+                      {t("rename")}
+                    </button>
+                    {client.status !== "revoked" && (
+                      <button
+                        disabled={pairingBusy}
+                        onClick={() => void revokeClient(client.id)}
+                      >
+                        {t("revoke")}
+                      </button>
+                    )}
+                  </div>
+                ))}
               </div>
-            </form>
+            </section>
             <form
               className="agent-settings"
               onSubmit={(event) => void saveAgents(event)}

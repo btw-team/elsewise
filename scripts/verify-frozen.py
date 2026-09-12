@@ -111,8 +111,36 @@ def available_port() -> int:
 
 
 def smoke_ingest_protocol(root: Path, port: int, version: str) -> None:
-    pairing_path = root / "config/pairing.json"
-    pairing = json.loads(pairing_path.read_text(encoding="utf-8"))
+    installation_id = str(uuid4())
+    nonce = f"{uuid4()}{uuid4()}"
+    with connect(
+        f"ws://127.0.0.1:{port}/ws/pairing",
+        origin="chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+        open_timeout=3,
+        close_timeout=1,
+    ) as pairing_socket:
+        pairing_socket.send(
+            json.dumps(
+                {
+                    "type": "pairing.request",
+                    "protocol_version": 2,
+                    "nonce": nonce,
+                    "installation_id": installation_id,
+                    "browser_family": "chrome",
+                    "display_name": "Frozen smoke test",
+                    "extension_version": version,
+                }
+            )
+        )
+        pending = json.loads(pairing_socket.recv(timeout=3))
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{port}/api/pairing/requests/{pending['request_id']}/approve",
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=3):
+            pass
+        approved = json.loads(pairing_socket.recv(timeout=3))
+        credential = approved["credential"]
     with connect(
         f"ws://127.0.0.1:{port}/ws/ingest",
         origin="chrome-extension://abcdefghijklmnopabcdefghijklmnop",
@@ -123,11 +151,16 @@ def smoke_ingest_protocol(root: Path, port: int, version: str) -> None:
             json.dumps(
                 {
                     "type": "client.hello",
-                    "protocol_version": 1,
+                    "protocol_version": 2,
                     "role": "extension",
-                    "token": pairing["token"],
-                    "installation_id": str(uuid4()),
+                    "credential": credential,
+                    "installation_id": installation_id,
                     "extension_version": version,
+                    "capabilities": [
+                        "pairing_requests",
+                        "daemon_source_control",
+                        "normalized_evidence",
+                    ],
                 }
             )
         )

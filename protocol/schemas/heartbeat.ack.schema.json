@@ -1,0 +1,32 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/heartbeat.ack.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "session": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session"
+    },
+    "type": {
+      "const": "heartbeat.ack",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": ["type", "protocol_version"],
+  "title": "HeartbeatAck",
+  "type": "object"
+}

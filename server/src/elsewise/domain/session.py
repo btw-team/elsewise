@@ -1,81 +1,70 @@
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
 
-from elsewise.domain.states import AgentStatus, CaptureStatus, RecordingStatus
-from elsewise.settings.limits import STOP_FINALIZE_GRACE_SECONDS
+from elsewise.domain.states import AgentStatus, RecordingStatus, SourceStatus
 
 
 class TransitionRejected(ValueError):
     pass
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class StartResult:
     segment_sequence: int
     enqueue_initial_turn: bool
 
 
-@dataclass
+@dataclass(slots=True)
 class SessionMachine:
-    recording_status: RecordingStatus = RecordingStatus.IDLE
-    capture_status: CaptureStatus = CaptureStatus.NO_SOURCE
+    recording_status: RecordingStatus = RecordingStatus.STOPPED
+    source_status: SourceStatus = SourceStatus.NO_SOURCE
     agent_status: AgentStatus = AgentStatus.NOT_STARTED
-    enabled_source_id: str | None = None
-    active_source_id: str | None = None
+    selected_source_id: str | None = None
     segment_sequence: int = 0
     initial_turn_enqueued: bool = False
-    finalize_grace_until: datetime | None = None
-    finalize_grace_source_id: str | None = None
+    stop_boundary_offset_us: int | None = None
 
-    def enable_source(self, source_id: str, *, captions_visible: bool = False) -> None:
-        if (
-            self.recording_status is RecordingStatus.RUNNING
-            and self.active_source_id is not None
-            and self.active_source_id != source_id
-        ):
-            raise TransitionRejected("source_switch_rejected")
-        self.enabled_source_id = source_id
+    def start(self) -> StartResult:
+        if self.recording_status is RecordingStatus.STOPPING:
+            raise TransitionRejected("session_transition_in_progress")
         if self.recording_status is RecordingStatus.RUNNING:
-            self.active_source_id = source_id
-            self.capture_status = (
-                CaptureStatus.CAPTURING if captions_visible else CaptureStatus.CAPTIONS_NOT_DETECTED
-            )
-        elif self.capture_status is CaptureStatus.NO_SOURCE:
-            self.capture_status = CaptureStatus.CONNECTED
-
-    def start(self, *, now: datetime | None = None) -> StartResult:
-        if self.recording_status is RecordingStatus.RUNNING:
-            raise TransitionRejected("already_running")
-        _ = now or datetime.now(UTC)
-        self.recording_status = RecordingStatus.RUNNING
+            return StartResult(self.segment_sequence, False)
+        self.recording_status = RecordingStatus.STARTING
         self.segment_sequence += 1
-        self.finalize_grace_until = None
-        self.finalize_grace_source_id = None
-        enqueue_initial = not self.initial_turn_enqueued
+        self.selected_source_id = None
+        self.source_status = SourceStatus.WAITING_FOR_SOURCE
+        self.stop_boundary_offset_us = None
+        enqueue = not self.initial_turn_enqueued
         self.initial_turn_enqueued = True
         if self.agent_status is AgentStatus.NOT_STARTED:
             self.agent_status = AgentStatus.STARTING
-        if self.enabled_source_id is None:
-            self.active_source_id = None
-            self.capture_status = CaptureStatus.WAITING_FOR_SOURCE
-        else:
-            self.active_source_id = self.enabled_source_id
-            self.capture_status = CaptureStatus.CAPTIONS_NOT_DETECTED
-        return StartResult(self.segment_sequence, enqueue_initial)
+        self.recording_status = RecordingStatus.RUNNING
+        return StartResult(self.segment_sequence, enqueue)
 
-    def stop(self, *, now: datetime | None = None) -> None:
+    def select_source(self, source_id: str, *, captions_visible: bool = False) -> None:
         if self.recording_status is not RecordingStatus.RUNNING:
-            raise TransitionRejected("not_running")
-        stopped_at = now or datetime.now(UTC)
-        self.recording_status = RecordingStatus.STOPPED
-        self.finalize_grace_until = stopped_at + timedelta(seconds=STOP_FINALIZE_GRACE_SECONDS)
-        self.finalize_grace_source_id = self.active_source_id
-        self.active_source_id = None
-        self.capture_status = (
-            CaptureStatus.CONNECTED
-            if self.enabled_source_id is not None
-            else CaptureStatus.NO_SOURCE
+            raise TransitionRejected("session_not_running")
+        self.selected_source_id = source_id
+        self.source_status = (
+            SourceStatus.CAPTURING if captions_visible else SourceStatus.CAPTIONS_NOT_DETECTED
         )
 
-    def in_finalize_grace(self, at: datetime) -> bool:
-        return self.finalize_grace_until is not None and at <= self.finalize_grace_until
+    def lose_source(self, source_id: str) -> None:
+        if self.selected_source_id == source_id:
+            self.source_status = SourceStatus.WAITING_FOR_SOURCE
+
+    def begin_stop(self, *, boundary_offset_us: int) -> None:
+        if self.recording_status is RecordingStatus.STOPPED:
+            return
+        if self.recording_status is not RecordingStatus.RUNNING:
+            raise TransitionRejected("session_not_running")
+        self.recording_status = RecordingStatus.STOPPING
+        self.stop_boundary_offset_us = boundary_offset_us
+
+    def finish_stop(self) -> None:
+        if self.recording_status is RecordingStatus.STOPPED:
+            return
+        if self.recording_status is not RecordingStatus.STOPPING:
+            raise TransitionRejected("session_not_stopping")
+        self.recording_status = RecordingStatus.STOPPED
+        self.selected_source_id = None
+        self.source_status = SourceStatus.NO_SOURCE

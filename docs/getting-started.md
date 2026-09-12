@@ -80,19 +80,12 @@ inside the side panel.
 
 ## 4. Pair the browser extension
 
-The server and launcher create a shared local extension pairing token automatically
-when one does not exist. Open **Settings** in either the web GUI or launcher, find
-**Browser extension pairing**, select **Copy token**, and paste the value into the
-extension popup.
-
-The Settings section also accepts a manually entered token through **Save** and can
-create a replacement through **Regenerate**. Save manual edits before copying them.
-Changing the saved token immediately invalidates the previous credential, while the
-unchanged token persists across restarts. See
+Open the extension popup and select **Pair**. Then approve the pending browser
+request under **Settings → Browser extension pairing** in either the web GUI or
+launcher. The browser stores its own credential and reconnects automatically. See
 [Browser extension pairing](pairing.md) for the complete lifecycle and security
-notes.
+notes. The popup should then report the daemon as **Connected**.
 
-The popup should report the daemon as **Connected**.
 
 ## 5. Open the web GUI
 
@@ -151,11 +144,12 @@ The provider, language, preset, initial prompt, and working directory become loc
 after the first start. Title, description, and permissions remain editable while
 the session is not actively recording.
 
-## 9. Enable capture
+## 9. Start capture
 
 Open a supported meeting, enable the meeting platform's own captions, open the
-Elsewise popup in that tab, and choose **Enable**. Then start the session in the web
-GUI. Starting before a source appears is valid; the session waits for capture.
+Elsewise popup to confirm it is paired. Then start the session in the web GUI.
+Starting before a source appears is valid; the session waits and attaches a source
+when one becomes available.
 
 ## 10. Use the transcript and agent
 

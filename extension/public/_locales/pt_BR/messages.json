@@ -8,7 +8,6 @@
   },
   "unsupportedPage": { "message": "Página não compatível" },
   "syntheticHarness": { "message": "Ambiente de teste" },
-  "captureLabel": { "message": "Captura" },
   "captionsLabel": { "message": "Legendas" },
   "speakerLabel": { "message": "Falante" },
   "bufferLabel": { "message": "Buffer" },
@@ -40,30 +39,14 @@
   "captionsOnEmptyStatus": { "message": "Ativadas, sem fala" },
   "captionsCapturingStatus": { "message": "Capturando" },
   "speakerAvailable": { "message": "Disponível" },
-  "enableCapture": { "message": "Ativar captura" },
-  "disableCapture": { "message": "Desativar captura" },
-  "hintCaptionsOff": {
-    "message": "As legendas estão desativadas. Ative-as manualmente na reunião."
-  },
-  "hintCaptionsEmpty": {
-    "message": "As legendas estão ativadas; ainda não há fala visível."
-  },
-  "hintCapture": {
-    "message": "A captura usa o painel de legendas que você ativa na reunião."
-  },
   "hintUnsupported": {
     "message": "Abra Google Meet, Microsoft Teams ou Zoom para começar."
   },
   "openSidePanel": { "message": "Abrir painel lateral" },
   "openNewTab": { "message": "Abrir em nova aba" },
-  "pairingToken": { "message": "Token de pareamento" },
-  "save": { "message": "Salvar" },
   "debug": { "message": "Depuração" },
   "dumpCaptionDom": { "message": "Salvar DOM das legendas" },
   "copyDiagnostics": { "message": "Copiar diagnóstico" },
-  "sourceSwitchRejected": {
-    "message": "Pare a gravação antes de trocar a fonte."
-  },
   "diagnosticRequested": {
     "message": "Um download de diagnóstico anonimizado foi solicitado."
   },
@@ -75,8 +58,20 @@
     "message": "Não foi possível abrir o painel lateral."
   },
   "guiUnavailable": { "message": "Não foi possível abrir o Elsewise." },
-  "pairingSaved": { "message": "Token de pareamento salvo localmente." },
   "connectingServer": { "message": "Conectando ao Elsewise…" },
   "startServer": { "message": "Inicie o servidor Elsewise" },
-  "retry": { "message": "Tentar novamente" }
+  "retry": { "message": "Tentar novamente" },
+  "sourceLabel": { "message": "Fonte" },
+  "stopping": { "message": "parando" },
+  "degraded": { "message": "degradado" },
+  "sourceActive": { "message": "Ativa" },
+  "sourceWaiting": { "message": "Aguardando seleção da sessão" },
+  "hintSourceManaged": {
+    "message": "O Elsewise inicia esta fonte automaticamente para a sessão ativa."
+  },
+  "pair": { "message": "Parear" },
+  "cancel": { "message": "Cancelar" },
+  "pairingRequired": { "message": "Pareamento necessário" },
+  "pairingPending": { "message": "Aguardando aprovação no Elsewise…" },
+  "pairingPaired": { "message": "Pareado com o Elsewise" }
 }

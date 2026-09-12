@@ -1,8 +1,9 @@
 {
   "type": "client.hello",
-  "protocol_version": 2,
+  "protocol_version": 1,
   "role": "extension",
-  "token": "0123456789abcdef0123456789abcdef",
-  "installation_id": "b61b254a-172b-4b81-9232-c870935f2cc3",
-  "extension_version": "0.1.2"
+  "credential": "11111111-1111-4111-8111-111111111111.abcdefghijklmnopqrstuvwxyzABCDEFGH123456789",
+  "installation_id": "11111111-1111-4111-8111-111111111111",
+  "extension_version": "0.2.0",
+  "capabilities": []
 }

@@ -21,7 +21,7 @@ installAppTestHarness();
 describe("App actions", () => {
   it("edits actions in the dedicated two-tab drawer", async () => {
     const idle = structuredClone(snapshot);
-    idle.sessions[0]!.recording_status = "idle";
+    idle.sessions[0]!.recording_status = "stopped";
     idle.sessions[0]!.agent_status = "not_started";
     vi.mocked(fetch).mockImplementation(async (input) => {
       const path = String(input);
@@ -44,6 +44,11 @@ describe("App actions", () => {
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Agent actions")).not.toBeInTheDocument();
     fireEvent.mouseDown(document.querySelector(".dialog-backdrop")!);
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Settings" }),
+      ).not.toBeInTheDocument(),
+    );
 
     const actionBar = document.querySelector(".action-bar") as HTMLElement;
     const actionTrigger = within(actionBar).getByRole("button", {
@@ -58,10 +63,9 @@ describe("App actions", () => {
     expect(
       await screen.findByRole("button", { name: "Close" }),
     ).toBeInTheDocument();
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
-      "Action presets",
-      "Agent actions",
-    ]);
+    expect(
+      (await screen.findAllByRole("tab")).map((tab) => tab.textContent),
+    ).toEqual(["Action presets", "Agent actions"]);
     expect(screen.getByRole("tab", { name: "Action presets" })).toHaveAttribute(
       "aria-selected",
       "true",
@@ -152,7 +156,7 @@ describe("App actions", () => {
 
   it("creates an action without exposing a stable key", async () => {
     const idle = structuredClone(snapshot);
-    idle.sessions[0]!.recording_status = "idle";
+    idle.sessions[0]!.recording_status = "stopped";
     idle.sessions[0]!.agent_status = "not_started";
     const created = {
       ...snapshot.buttons[1]!,
@@ -203,7 +207,7 @@ describe("App actions", () => {
 
   it("confirms action and preset deletion with in-app dialogs", async () => {
     const idle = structuredClone(snapshot);
-    idle.sessions[0]!.recording_status = "idle";
+    idle.sessions[0]!.recording_status = "stopped";
     idle.sessions[0]!.agent_status = "not_started";
     vi.mocked(fetch).mockImplementation(async (input, options) => {
       const path = String(input);

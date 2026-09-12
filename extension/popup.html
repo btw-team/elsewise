@@ -43,7 +43,7 @@
       </header>
       <dl class="status-grid">
         <div>
-          <dt data-i18n="captureLabel">Capture</dt>
+          <dt data-i18n="sourceLabel">Source</dt>
           <dd id="capture" data-i18n="disabled">Disabled</dd>
         </div>
         <div>
@@ -72,9 +72,11 @@
         Open Google Meet, Microsoft Teams, or Zoom to begin.
       </p>
       <div class="actions">
-        <button id="toggle" class="primary" data-i18n="enableCapture" disabled>
-          Enable capture
-        </button>
+        <p id="pairing-state" class="hint" data-i18n="pairingRequired">
+          Pairing required
+        </p>
+        <button id="pair" class="primary" data-i18n="pair">Pair</button>
+        <button id="cancel-pairing" data-i18n="cancel" hidden>Cancel</button>
         <button
           id="open-side-panel"
           class="gui-action"
@@ -86,16 +88,6 @@
           Open in new tab
         </button>
       </div>
-      <form id="pairing" class="pairing">
-        <label for="token" data-i18n="pairingToken">Pairing token</label>
-        <div>
-          <input id="token" type="password" autocomplete="off" /><button
-            data-i18n="save"
-          >
-            Save
-          </button>
-        </div>
-      </form>
       <p id="notice" class="notice" aria-live="polite"></p>
       <section class="debug-section">
         <p class="debug-title" data-i18n="debug">Debug</p>

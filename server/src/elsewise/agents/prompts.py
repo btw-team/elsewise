@@ -9,7 +9,7 @@ class ContextUtterance(Protocol):
     speaker: str | None
     text: str
     final: bool
-    last_observed_at: datetime
+    last_received_at: datetime
 
 
 ContextStrategy = Literal["since_previous_turn", "last_minutes", "last_utterances", "all"]
@@ -47,7 +47,7 @@ class FrozenContext:
 
 
 def format_utterance(utterance: ContextUtterance, speaker_role: str) -> str:
-    timestamp = utterance.last_observed_at.isoformat()
+    timestamp = utterance.last_received_at.isoformat()
     speaker = utterance.speaker or "Unknown speaker"
     if speaker_role == "self":
         speaker = f"You ({speaker})"
@@ -68,16 +68,16 @@ def freeze_context(
     if strategy == "last_utterances":
         candidates = [item for item in candidates if item.final][-(value or 1) :]
     elif strategy == "last_minutes" and candidates:
-        threshold = candidates[-1].last_observed_at - timedelta(minutes=value or 1)
-        candidates = [item for item in candidates if item.last_observed_at >= threshold]
+        threshold = candidates[-1].last_received_at - timedelta(minutes=value or 1)
+        candidates = [item for item in candidates if item.last_received_at >= threshold]
     elif strategy == "since_previous_turn" and previous_boundary_id:
         boundary = next(
             (index for index, item in enumerate(candidates) if item.id == previous_boundary_id),
             None,
         )
         if boundary is not None:
-            threshold = candidates[boundary].last_observed_at - timedelta(minutes=value or 1)
-            candidates = [item for item in candidates if item.last_observed_at >= threshold]
+            threshold = candidates[boundary].last_received_at - timedelta(minutes=value or 1)
+            candidates = [item for item in candidates if item.last_received_at >= threshold]
 
     roles = speaker_roles or {}
     rendered = [
@@ -97,8 +97,8 @@ def freeze_context(
         text=text,
         start_id=selected[0].id if selected else None,
         end_id=selected[-1].id if selected else None,
-        start_at=selected[0].last_observed_at if selected else None,
-        end_at=selected[-1].last_observed_at if selected else None,
+        start_at=selected[0].last_received_at if selected else None,
+        end_at=selected[-1].last_received_at if selected else None,
         truncated=truncated,
         utterance_count=len(selected),
     )

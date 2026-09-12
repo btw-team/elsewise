@@ -110,7 +110,7 @@ def render_captions(
             speaker = _safe(utterance.speaker or "Unknown speaker")
             text = _safe(utterance.text)
             lines.append(
-                f"- `{_timestamp(utterance.last_observed_at)}` **{speaker}:** {text}{partial}"
+                f"- `{_timestamp(utterance.last_received_at)}` **{speaker}:** {text}{partial}"
             )
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
@@ -211,7 +211,7 @@ class ExportService:
                     select(UtteranceRecord)
                     .where(UtteranceRecord.session_id == session_id)
                     .order_by(
-                        UtteranceRecord.first_observed_at,
+                        UtteranceRecord.first_session_offset_us,
                         UtteranceRecord.first_client_seq,
                     )
                 )

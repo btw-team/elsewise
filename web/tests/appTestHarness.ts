@@ -32,10 +32,9 @@ export const snapshot: TestSnapshot = {
       agent_model: "gpt-5.6-sol",
       agent_reasoning_effort: "low",
       recording_status: "running",
-      capture_status: "capturing",
+      source_status: "capturing",
       agent_status: "ready",
-      enabled_source_id: "source-1",
-      active_source_id: "source-1",
+      selected_source_id: "source-1",
       allow_workspace_write: false,
       allow_network: false,
       requested_agent_cwd: null,
@@ -54,15 +53,17 @@ export const snapshot: TestSnapshot = {
       id: "utterance-1",
       session_id: "session-1",
       segment_id: "segment-1",
-      source_id: "source-1",
+      source_epoch_id: "epoch-1",
       utterance_id: "caption-1",
       revision: 2,
       speaker: "Speaker A",
       speaker_role: "self",
       text: '<img src=x onerror="alert(1)"> Safe transcript',
       final: false,
-      first_observed_at: "2026-08-13T10:01:00Z",
-      last_observed_at: "2026-08-13T10:01:02Z",
+      first_session_offset_us: 60_000_000,
+      last_session_offset_us: 62_000_000,
+      first_received_at: "2026-08-13T10:01:00Z",
+      last_received_at: "2026-08-13T10:01:02Z",
       first_client_seq: 1,
       last_client_seq: 2,
     },
@@ -72,7 +73,6 @@ export const snapshot: TestSnapshot = {
       id: "segment-1",
       session_id: "session-1",
       sequence: 1,
-      source_id: "source-1",
       started_at: "2026-08-13T10:00:00Z",
       stopped_at: null,
       stop_reason: null,
@@ -80,14 +80,18 @@ export const snapshot: TestSnapshot = {
   ],
   sources: [
     {
-      source_id: "source-1",
+      id: "source-1",
+      paired_client_id: "client-1",
+      source_kind: "browser_captions",
       platform: "google_meet",
-      meeting_key: "safe",
-      meeting_title: null,
-      enabled: true,
+      driver_id: "google_meet_captions",
+      driver_version: "1.0.0",
+      tab_instance_id: "tab-1",
+      capabilities: ["captions"],
+      available: true,
       connected: true,
-      captions_status: "capturing",
-      speaker_detection: "available",
+      health_status: "capturing",
+      last_error_code: null,
       last_event_at: "2026-08-13T10:01:02Z",
     },
   ],
@@ -301,13 +305,6 @@ export const providerHealth = {
   ],
 };
 
-export const pairingSettings = {
-  token: "existing-pairing-token-value",
-  masked_token: "exis…alue",
-  created_at: "2026-08-20T10:00:00Z",
-  generation: 1,
-};
-
 export class FakeWebSocket {
   static OPEN = 1;
   static instances: FakeWebSocket[] = [];
@@ -342,8 +339,9 @@ export function installAppTestHarness(): void {
               captions_path: "/safe/exports/session-1/captions.md",
               agent_path: "/safe/exports/session-1/agent.md",
             }
-          : path.endsWith("/api/extension/pairing")
-            ? pairingSettings
+          : path.endsWith("/api/pairing/requests") ||
+              path.endsWith("/api/paired-clients")
+            ? []
             : path.endsWith("/api/agent/providers")
               ? providerHealth
               : path.endsWith("/api/settings")

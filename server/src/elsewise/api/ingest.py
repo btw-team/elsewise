@@ -1,3 +1,4 @@
+import asyncio
 import json
 import time
 from collections import deque
@@ -11,13 +12,16 @@ from elsewise.observability import RuntimeDiagnostics, log_event
 from elsewise.persistence.database import Database
 from elsewise.persistence.models import SessionRecord
 from elsewise.protocol.models import (
+    CaptionFinalize,
+    CaptionUpsert,
     ClientHello,
-    SourceStatus,
-    UtteranceFinalize,
-    UtteranceUpsert,
+    SourceCommandAck,
+    SourceDiscovered,
+    SourceHealth,
     parse_protocol_message,
 )
-from elsewise.services.capture import CaptureService
+from elsewise.services.errors import ServiceError
+from elsewise.services.pairing import PairingService
 from elsewise.services.sessions import session_payload
 from elsewise.settings.config import SettingsStore
 from elsewise.settings.limits import (
@@ -25,7 +29,9 @@ from elsewise.settings.limits import (
     MAX_INGEST_EVENTS_PER_SECOND,
     MAX_INGEST_MESSAGE_BYTES,
 )
-from elsewise.settings.pairing import PairingManager
+from elsewise.sources.connections import BrowserConnectionRegistry
+from elsewise.sources.manager import SourceManager
+from elsewise.sources.projectors.captions import CaptionProjector
 
 
 def _error(
@@ -39,7 +45,7 @@ def _error(
     log_event("protocol.rejected", reason=code, recoverable=recoverable)
     return {
         "type": "protocol.error",
-        "protocol_version": 1,
+        "protocol_version": 2,
         "code": code,
         "message": message,
         "recoverable": recoverable,
@@ -60,18 +66,22 @@ def _event_reference(payload: object) -> tuple[str | None, int | None]:
 
 
 async def ingest_websocket(websocket: WebSocket) -> None:
-    origin = websocket.headers.get("origin", "")
-    if not safe_extension_origin(origin):
+    if not safe_extension_origin(websocket.headers.get("origin", "")):
         await websocket.close(code=1008, reason="invalid_origin")
         return
     await websocket.accept()
     diagnostics = cast(RuntimeDiagnostics, websocket.app.state.diagnostics)
     diagnostics.connected("ingest")
     database = cast(Database, websocket.app.state.database)
-    pairing = cast(PairingManager, websocket.app.state.pairing)
-    capture = CaptureService(database, cast(SettingsStore, websocket.app.state.settings))
-    installation_id = ""
+    pairing = cast(PairingService, websocket.app.state.pairing)
+    sources = cast(SourceManager, websocket.app.state.source_manager)
+    connections = cast(BrowserConnectionRegistry, websocket.app.state.browser_connections)
+    projector = CaptionProjector(database, cast(SettingsStore, websocket.app.state.settings))
+    paired_client_id = ""
+    connection_id = ""
+    credential = ""
     recent_events: deque[float] = deque()
+    command_tasks: set[asyncio.Task[str]] = set()
     try:
         raw = await websocket.receive_text()
         if len(raw.encode("utf-8")) > MAX_INGEST_MESSAGE_BYTES:
@@ -82,6 +92,19 @@ async def ingest_websocket(websocket: WebSocket) -> None:
             return
         try:
             hello_value = json.loads(raw)
+        except json.JSONDecodeError:
+            hello_value = None
+        if isinstance(hello_value, dict) and hello_value.get("protocol_version") != 2:
+            await websocket.send_json(
+                _error(
+                    "incompatible_protocol",
+                    "Protocol version 2 is required.",
+                    recoverable=False,
+                )
+            )
+            await websocket.close(code=1008)
+            return
+        try:
             hello = parse_protocol_message(hello_value)
         except Exception:
             await websocket.send_json(
@@ -95,22 +118,35 @@ async def ingest_websocket(websocket: WebSocket) -> None:
             )
             await websocket.close(code=1008)
             return
-        if not pairing.verify(hello.token):
+        client = pairing.verify(hello.credential)
+        if client is None or client.installation_id != str(hello.installation_id):
             await websocket.send_json(
-                _error("unauthorized", "The pairing token is invalid.", recoverable=False)
+                _error("unauthorized", "The client credential is invalid.", recoverable=False)
             )
             await websocket.close(code=1008)
             return
-        installation_id = str(hello.installation_id)
-        pairing_generation = pairing.metadata().generation
+        paired_client_id = client.id
+        credential = hello.credential
+        connection_id = connections.register(
+            client.id,
+            websocket.send_json,
+            lambda code, reason: websocket.close(code=code, reason=reason),
+        )
         with database.transaction() as db:
             current = db.scalar(
-                select(SessionRecord).where(SessionRecord.recording_status == "running")
+                select(SessionRecord).where(
+                    SessionRecord.recording_status.in_(("starting", "running", "stopping"))
+                )
             )
         await websocket.send_json(
             {
                 "type": "server.hello",
-                "protocol_version": 1,
+                "protocol_version": 2,
+                "capabilities": [
+                    "pairing_requests",
+                    "daemon_source_control",
+                    "normalized_evidence",
+                ],
                 "heartbeat_interval_seconds": HEARTBEAT_INTERVAL_SECONDS,
                 "session": session_payload(current) if current else None,
             }
@@ -118,9 +154,10 @@ async def ingest_websocket(websocket: WebSocket) -> None:
 
         while True:
             raw = await websocket.receive_text()
-            if pairing.metadata().generation != pairing_generation:
+            verified = pairing.verify(credential)
+            if verified is None:
                 await websocket.send_json(
-                    _error("unauthorized", "The pairing token was regenerated.", recoverable=False)
+                    _error("client_revoked", "The client was revoked.", recoverable=False)
                 )
                 await websocket.close(code=1008)
                 return
@@ -150,12 +187,14 @@ async def ingest_websocket(websocket: WebSocket) -> None:
             if payload.get("type") == "heartbeat":
                 with database.transaction() as db:
                     current = db.scalar(
-                        select(SessionRecord).where(SessionRecord.recording_status == "running")
+                        select(SessionRecord).where(
+                            SessionRecord.recording_status.in_(("starting", "running", "stopping"))
+                        )
                     )
                 await websocket.send_json(
                     {
                         "type": "heartbeat.ack",
-                        "protocol_version": 1,
+                        "protocol_version": 2,
                         "session": session_payload(current) if current else None,
                     }
                 )
@@ -183,20 +222,33 @@ async def ingest_websocket(websocket: WebSocket) -> None:
                 await websocket.send_json(
                     _error(
                         "invalid_message",
-                        "The message does not match protocol v1.",
+                        "The message does not match protocol v2.",
                         recoverable=False,
                         event_id=event_id,
                         client_seq=client_seq,
                     )
                 )
                 continue
-            source_rejected = False
-            if isinstance(message, SourceStatus):
-                result = capture.update_source(message, installation_id=installation_id)
-                source_rejected = result == "source_switch_rejected"
-                ack_result = "rejected" if source_rejected else result
-            elif isinstance(message, (UtteranceUpsert, UtteranceFinalize)):
-                ack_result = capture.process_caption(message)
+
+            details: dict[str, Any] | None = None
+            if isinstance(message, SourceDiscovered):
+                try:
+                    source_id, epoch_id = sources.discover(
+                        message, paired_client_id=paired_client_id
+                    )
+                except ServiceError as exc:
+                    ack_result = "rejected"
+                    details = {"error_code": exc.code}
+                else:
+                    ack_result = "applied"
+                    details = {"source_id": source_id, "source_epoch_id": epoch_id}
+            elif isinstance(message, SourceHealth):
+                ack_result = sources.update_health(message, paired_client_id=paired_client_id)
+            elif isinstance(message, (CaptionUpsert, CaptionFinalize)):
+                ack_result = projector.process(message)
+            elif isinstance(message, SourceCommandAck):
+                connections.acknowledge(str(message.command_id), message.model_dump(mode="json"))
+                continue
             else:
                 event_id, client_seq = _event_reference(payload)
                 await websocket.send_json(
@@ -212,14 +264,25 @@ async def ingest_websocket(websocket: WebSocket) -> None:
             await websocket.send_json(
                 {
                     "type": "event.ack",
-                    "protocol_version": 1,
+                    "protocol_version": 2,
                     "event_id": str(message.event_id),
                     "client_seq": message.client_seq,
                     "result": ack_result,
-                    **({"reason": "source_switch_rejected"} if source_rejected else {}),
+                    **({"reason": ack_result} if ack_result != "applied" else {}),
+                    **({"details": details} if details is not None else {}),
                 }
             )
+            if isinstance(message, SourceDiscovered) and details is not None:
+                epoch_id = details.get("source_epoch_id")
+                if isinstance(epoch_id, str):
+                    task = asyncio.create_task(sources.start_epoch(epoch_id))
+                    command_tasks.add(task)
+                    task.add_done_callback(command_tasks.discard)
     except WebSocketDisconnect:
         return
     finally:
+        if paired_client_id and connections.unregister(paired_client_id, connection_id):
+            sources.disconnect_client(paired_client_id)
+        for task in command_tasks:
+            task.cancel()
         diagnostics.disconnected("ingest")

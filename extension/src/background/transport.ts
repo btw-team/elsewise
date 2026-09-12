@@ -2,7 +2,11 @@ import {
   HEARTBEAT_INTERVAL_SECONDS,
   PROTOCOL_VERSION,
 } from "../protocol/limits";
-import type { EventAck, ProtocolError } from "../protocol/models";
+import type {
+  EventAck,
+  ProtocolError,
+  SourceCommand,
+} from "../protocol/models";
 import { PersistentEventBuffer, type BufferedEvent } from "./event-buffer";
 import { ReconnectBackoff } from "./backoff";
 
@@ -46,7 +50,7 @@ export class IngestTransport {
 
   constructor(
     private readonly buffer: PersistentEventBuffer,
-    private readonly token: string,
+    private readonly credential: string,
     private readonly installationId: string,
     private readonly extensionVersion: string,
     private readonly socketFactory: (url: string) => SocketLike = (url) =>
@@ -54,12 +58,15 @@ export class IngestTransport {
     private readonly backoff = new ReconnectBackoff(),
     private readonly onState: (state: TransportState) => void = () => undefined,
     private readonly onAck: (ack: EventAck) => void = () => undefined,
+    private readonly onCommand: (command: SourceCommand) => void = () =>
+      undefined,
     private readonly resendIntervalMs = RESEND_INTERVAL_MS,
+    private readonly onConnected: () => Promise<void> = async () => undefined,
   ) {}
 
   start(): void {
     this.#stopped = false;
-    if (!this.token) {
+    if (!this.credential) {
       this.#setState({ daemon: "not_paired" });
       return;
     }
@@ -77,7 +84,7 @@ export class IngestTransport {
   async enqueue(event: BufferedEvent): Promise<boolean> {
     const accepted = await this.buffer.enqueue(
       event,
-      event.type === "source.status" ? null : this.#runningSessionId(),
+      event.type.startsWith("source.") ? null : this.#runningSessionId(),
     );
     await this.#refreshCounts();
     if (accepted && this.#socket?.readyState === SOCKET_OPEN) {
@@ -88,6 +95,12 @@ export class IngestTransport {
 
   state(): TransportState {
     return { ...this.#state };
+  }
+
+  sendControl(message: Record<string, unknown>): boolean {
+    if (this.#socket?.readyState !== SOCKET_OPEN) return false;
+    this.#socket.send(JSON.stringify(message));
+    return true;
   }
 
   #connect(): void {
@@ -101,9 +114,14 @@ export class IngestTransport {
           type: "client.hello",
           protocol_version: PROTOCOL_VERSION,
           role: "extension",
-          token: this.token,
+          credential: this.credential,
           installation_id: this.installationId,
           extension_version: this.extensionVersion,
+          capabilities: [
+            "pairing_requests",
+            "daemon_source_control",
+            "normalized_evidence",
+          ],
         }),
       );
     };
@@ -138,12 +156,13 @@ export class IngestTransport {
       this.#heartbeat = setInterval(() => {
         if (this.#socket?.readyState === SOCKET_OPEN) {
           this.#socket.send(
-            JSON.stringify({ type: "heartbeat", protocol_version: 1 }),
+            JSON.stringify({ type: "heartbeat", protocol_version: 2 }),
           );
         }
       }, HEARTBEAT_INTERVAL_SECONDS * 1000);
       await this.buffer.reconcileSession(this.#runningSessionId());
       await this.#resend();
+      await this.onConnected();
       return;
     }
     if (message.type === "event.ack") {
@@ -151,6 +170,10 @@ export class IngestTransport {
       this.onAck(ack);
       await this.buffer.acknowledge(ack.event_id);
       await this.#refreshCounts();
+      return;
+    }
+    if (message.type === "source.start" || message.type === "source.stop") {
+      this.onCommand(message as unknown as SourceCommand);
       return;
     }
     if (message.type === "heartbeat.ack") {
@@ -163,7 +186,7 @@ export class IngestTransport {
     }
     if (message.type === "protocol.error") {
       const error = message as unknown as ProtocolError;
-      if (error.code === "unauthorized") {
+      if (error.code === "unauthorized" || error.code === "client_revoked") {
         this.#setState({ daemon: "not_paired" });
         this.#stopped = true;
         this.#socket?.close();

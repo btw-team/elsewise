@@ -268,5 +268,89 @@
     "http_status": 500,
     "translation_key": "requestFailed",
     "description": "The resolved export path escaped its permitted root."
+  },
+  {
+    "code": "invalid_message",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "A protocol message is invalid."
+  },
+  {
+    "code": "invalid_pairing_nonce",
+    "http_status": 403,
+    "translation_key": "invalidRequest",
+    "description": "The pairing proof is invalid."
+  },
+  {
+    "code": "invalid_source_transition",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "The source lifecycle transition is invalid."
+  },
+  {
+    "code": "paired_client_not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "The paired browser client does not exist."
+  },
+  {
+    "code": "pairing_request_already_decided",
+    "http_status": 409,
+    "translation_key": "invalidRequest",
+    "description": "The pairing request is no longer pending."
+  },
+  {
+    "code": "pairing_request_not_found",
+    "http_status": 404,
+    "translation_key": "resourceNotFound",
+    "description": "The pairing request does not exist."
+  },
+  {
+    "code": "pairing_rate_limited",
+    "http_status": 429,
+    "translation_key": "queueFullError",
+    "description": "Too many pairing requests are pending."
+  },
+  {
+    "code": "session_not_stopping",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "The operation requires a stopping session."
+  },
+  {
+    "code": "session_transition_in_progress",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "Another session transition is in progress."
+  },
+  {
+    "code": "source_capabilities_missing",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The source omitted capabilities required by its registered driver."
+  },
+  {
+    "code": "source_unavailable",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "The selected capture source is unavailable."
+  },
+  {
+    "code": "unsupported_source_capability",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The source advertised a capability unsupported by its registered driver."
+  },
+  {
+    "code": "unsupported_source_driver",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The source driver is not present in the code-owned registry."
+  },
+  {
+    "code": "transition_queue_full",
+    "http_status": 429,
+    "translation_key": "queueFullError",
+    "description": "The serialized transition queue is full."
   }
 ]

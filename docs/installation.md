@@ -5,6 +5,10 @@ archives. Python and Node.js are not required on the target computer. Codex and
 Claude Code are external tools: at least one is required for AI assistance, while
 caption capture, transcript history, and export work without one.
 
+Phase 1 uses a clean consolidated database schema. Before the first Phase 1 launch,
+delete the existing pre-release Elsewise database file. It contains no supported
+user data and is not migrated or backed up automatically.
+
 ## Unsigned preview builds
 
 Current artifacts are not code-signed or notarized. Download an artifact and
@@ -55,9 +59,9 @@ Until public store listings are available, releases include ZIP archives for Chr
 Firefox temporary add-ons are removed when Firefox exits. Store installation will
 replace this development flow later.
 
-After loading the extension, copy the automatically generated token from **Browser
-extension pairing** in the web GUI or launcher Settings and save it in the extension
-popup. See [Browser extension pairing](pairing.md).
+After loading the extension, select **Pair** in its popup and approve the pending
+request in the web GUI or launcher Settings. See
+[Browser extension pairing](pairing.md).
 
 ## Updates
 

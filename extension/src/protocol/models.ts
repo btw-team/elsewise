@@ -1,128 +1,228 @@
+export const PROTOCOL_VERSION = 2 as const;
 export type Platform = "google_meet" | "microsoft_teams" | "zoom" | "synthetic";
 
 export interface ClientHello {
   type: "client.hello";
-  protocol_version: 1;
+  protocol_version: 2;
   role: "extension";
-  token: string;
+  credential: string;
   installation_id: string;
+  extension_version: string;
+  capabilities: string[];
+}
+
+export interface PairingRequest {
+  type: "pairing.request";
+  protocol_version: 2;
+  nonce: string;
+  installation_id: string;
+  browser_family: "chrome" | "firefox";
+  display_name: string;
   extension_version: string;
 }
 
-export interface SourceStatus {
-  type: "source.status";
-  protocol_version: 1;
-  event_id: string;
-  source_id: string;
-  tab_id?: number;
-  document_id?: string;
-  client_seq: number;
-  platform: Platform;
-  enabled: boolean;
-  captions_status:
-    "unknown" | "off" | "on_empty" | "capturing" | "unavailable" | "error";
-  speaker_detection?: "unknown" | "available" | "unavailable";
-  meeting_key?: string;
-  meeting_title?: string;
-  last_caption_at?: string;
-  observed_at: string;
-  diagnostic_code?: string;
+export interface PairingCancel {
+  type: "pairing.cancel";
+  protocol_version: 2;
 }
 
-export interface CaptionMessage {
-  protocol_version: 1;
+export interface PairingPending {
+  type: "pairing.pending";
+  protocol_version: 2;
+  request_id: string;
+  expires_at: string;
+}
+
+export interface PairingApproved {
+  type: "pairing.approved";
+  protocol_version: 2;
+  request_id: string;
+  client_id: string;
+  credential: string;
+}
+
+export interface PairingDenied {
+  type: "pairing.denied";
+  protocol_version: 2;
+  request_id: string;
+}
+
+export interface PairingExpired {
+  type: "pairing.expired";
+  protocol_version: 2;
+  request_id: string;
+}
+
+export interface PairingCancelled {
+  type: "pairing.cancelled";
+  protocol_version: 2;
+  request_id: string;
+}
+
+export interface PairingError {
+  type: "pairing.error";
+  protocol_version: 2;
+  code: string;
+}
+
+export interface ServerHello {
+  type: "server.hello";
+  protocol_version: 2;
+  capabilities: string[];
+  heartbeat_interval_seconds: number;
+  session: Record<string, unknown> | null;
+}
+
+export interface Heartbeat {
+  type: "heartbeat";
+  protocol_version: 2;
+}
+
+export interface HeartbeatAck {
+  type: "heartbeat.ack";
+  protocol_version: 2;
+  session: Record<string, unknown> | null;
+}
+
+export interface SourceDiscovered {
+  type: "source.discovered";
+  protocol_version: 2;
+  event_id: string;
+  client_seq: number;
+  tab_instance_id: string;
+  producer_epoch_id: string;
+  platform: Platform;
+  activity_key?: string;
+  driver_id: string;
+  driver_version: string;
+  capabilities: string[];
+  health_status:
+    "available" | "waiting" | "degraded" | "unavailable" | "failed";
+  error_code?: string;
+  observed_at: string;
+}
+
+export interface SourceHealth {
+  type: "source.health";
+  protocol_version: 2;
+  event_id: string;
+  client_seq: number;
+  source_id: string;
+  source_epoch_id?: string;
+  health_status:
+    "available" | "waiting" | "degraded" | "unavailable" | "failed";
+  error_code?: string;
+  dropped_event_count: number;
+  observed_at: string;
+}
+
+export interface CaptionEvidence {
+  protocol_version: 2;
   event_id: string;
   source_id: string;
+  source_epoch_id: string;
   client_seq: number;
-  platform: Platform;
-  meeting_key: string;
   utterance_id: string;
   revision: number;
   speaker?: string | null;
   text: string;
-  observed_at: string;
+  session_offset_us: number;
+  source_time_us?: number;
 }
 
-export interface UtteranceUpsert extends CaptionMessage {
-  type: "utterance.upsert";
+export interface CaptionUpsert extends CaptionEvidence {
+  type: "caption.upsert";
 }
 
-export interface UtteranceFinalize extends CaptionMessage {
-  type: "utterance.finalize";
+export interface CaptionFinalize extends CaptionEvidence {
+  type: "caption.finalize";
 }
 
-export type AckResult =
-  | "applied"
-  | "duplicate"
-  | "stale"
-  | "no_active_session"
-  | "source_not_bound"
-  | "grace_finalize_applied"
-  | "rejected";
+export type BufferedEvidence =
+  SourceDiscovered | SourceHealth | CaptionUpsert | CaptionFinalize;
 
 export interface EventAck {
   type: "event.ack";
-  protocol_version: 1;
+  protocol_version: 2;
   event_id: string;
   client_seq: number;
-  result: AckResult;
+  result:
+    | "applied"
+    | "duplicate"
+    | "stale"
+    | "no_active_session"
+    | "source_not_bound"
+    | "rejected";
   reason?: string;
+  details?: { source_id?: string; source_epoch_id?: string | null };
 }
 
-export interface UiEvent {
-  type: "ui.event";
-  protocol_version: 1;
-  event_id: number;
-  event_type:
-    | "session.state"
-    | "source.status"
-    | "utterance.created"
-    | "utterance.updated"
-    | "utterance.finalized"
-    | "agent.queued"
-    | "agent.started"
-    | "agent.delta"
-    | "agent.completed"
-    | "agent.failed"
-    | "agent.cancelled"
-    | "settings.changed"
-    | "export.completed"
-    | "export.failed"
-    | "resync_required";
-  aggregate_id?: string | null;
-  created_at: string;
-  payload: Record<string, unknown>;
+export interface SourceCommand {
+  type: "source.start" | "source.stop";
+  protocol_version: 2;
+  command_id: string;
+  source_id: string;
+  source_epoch_id: string;
+  tab_instance_id: string;
+  session_id: string;
+  segment_id: string;
+  deadline_ms: number;
+}
+
+export interface SourceCommandAck {
+  type: "source.command_ack";
+  protocol_version: 2;
+  command_id: string;
+  source_id: string;
+  source_epoch_id: string;
+  result: "started" | "finalized" | "failed";
+  error_code?: string;
 }
 
 export interface ProtocolError {
   type: "protocol.error";
-  protocol_version: 1;
+  protocol_version: 2;
   event_id?: string;
   client_seq?: number;
-  code:
-    | "invalid_json"
-    | "invalid_message"
-    | "unsupported_protocol_version"
-    | "unauthorized"
-    | "hello_required"
-    | "unknown_message_type"
-    | "message_too_large"
-    | "rate_limited"
-    | "source_switch_rejected"
-    | "internal_error";
+  code: string;
   message: string;
   recoverable: boolean;
   details?: Record<string, unknown>;
 }
 
+export interface UiEvent {
+  type: "ui.event";
+  protocol_version: 2;
+  event_id: number;
+  event_type: string;
+  aggregate_id?: string | null;
+  created_at: string;
+  payload: Record<string, unknown>;
+}
+
 export interface ProtocolMessageMap {
+  "pairing.request": PairingRequest;
+  "pairing.cancel": PairingCancel;
+  "pairing.pending": PairingPending;
+  "pairing.approved": PairingApproved;
+  "pairing.denied": PairingDenied;
+  "pairing.expired": PairingExpired;
+  "pairing.cancelled": PairingCancelled;
+  "pairing.error": PairingError;
   "client.hello": ClientHello;
-  "source.status": SourceStatus;
-  "utterance.upsert": UtteranceUpsert;
-  "utterance.finalize": UtteranceFinalize;
+  "server.hello": ServerHello;
+  heartbeat: Heartbeat;
+  "heartbeat.ack": HeartbeatAck;
+  "source.discovered": SourceDiscovered;
+  "source.health": SourceHealth;
+  "caption.upsert": CaptionUpsert;
+  "caption.finalize": CaptionFinalize;
   "event.ack": EventAck;
-  "ui.event": UiEvent;
+  "source.start": SourceCommand;
+  "source.stop": SourceCommand;
+  "source.command_ack": SourceCommandAck;
   "protocol.error": ProtocolError;
+  "ui.event": UiEvent;
 }
 
 export type ProtocolMessageType = keyof ProtocolMessageMap;

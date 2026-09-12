@@ -12,10 +12,8 @@ from elsewise.persistence.models import (
     CaptionEventTombstoneRecord,
     CaptureSourceRecord,
     MaintenanceStateRecord,
-    RecordingSegmentRecord,
-    SessionRecord,
+    SourceEpochRecord,
     UiEventRecord,
-    UtteranceRecord,
 )
 
 DIAGNOSTIC_RETENTION = timedelta(days=7)
@@ -119,36 +117,14 @@ def perform_startup_maintenance(
         tombstones_deleted += int(getattr(tombstone_result, "rowcount", 0) or 0)
         tombstones_deleted += _trim_tombstones(db, MAX_TOMBSTONES)
 
-        referenced_sources = {
-            value
-            for row in db.execute(
-                select(
-                    SessionRecord.enabled_source_id,
-                    SessionRecord.active_source_id,
-                    SessionRecord.finalize_grace_source_id,
-                )
-            )
-            for value in row
-            if value
-        }
-        referenced_sources.update(
-            value
-            for value in db.scalars(
-                select(RecordingSegmentRecord.source_id).where(
-                    RecordingSegmentRecord.source_id.is_not(None)
-                )
-            )
-            if value
-        )
-        referenced_sources.update(db.scalars(select(UtteranceRecord.source_id)))
+        referenced_sources = set(db.scalars(select(SourceEpochRecord.source_id)))
         source_statement = delete(CaptureSourceRecord).where(
-            CaptureSourceRecord.enabled.is_(False),
             CaptureSourceRecord.connected.is_(False),
             CaptureSourceRecord.updated_at < current - SOURCE_RETENTION,
         )
         if referenced_sources:
             source_statement = source_statement.where(
-                CaptureSourceRecord.source_id.not_in(referenced_sources)
+                CaptureSourceRecord.id.not_in(referenced_sources)
             )
         source_result = db.execute(source_statement)
         sources_deleted = int(getattr(source_result, "rowcount", 0) or 0)
@@ -210,4 +186,4 @@ def perform_startup_maintenance(
 
 def mark_sources_disconnected(database: Database) -> None:
     with database.transaction() as db:
-        db.execute(update(CaptureSourceRecord).values(connected=False, enabled=False))
+        db.execute(update(CaptureSourceRecord).values(connected=False, available=False))

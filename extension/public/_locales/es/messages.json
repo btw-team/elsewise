@@ -8,7 +8,6 @@
   },
   "unsupportedPage": { "message": "Página no compatible" },
   "syntheticHarness": { "message": "Entorno de prueba" },
-  "captureLabel": { "message": "Captura" },
   "captionsLabel": { "message": "Subtítulos" },
   "speakerLabel": { "message": "Hablante" },
   "bufferLabel": { "message": "Búfer" },
@@ -40,30 +39,14 @@
   "captionsOnEmptyStatus": { "message": "Activados, sin voz" },
   "captionsCapturingStatus": { "message": "Capturando" },
   "speakerAvailable": { "message": "Disponible" },
-  "enableCapture": { "message": "Activar captura" },
-  "disableCapture": { "message": "Desactivar captura" },
-  "hintCaptionsOff": {
-    "message": "Los subtítulos están desactivados. Actívalos manualmente en la reunión."
-  },
-  "hintCaptionsEmpty": {
-    "message": "Los subtítulos están activados; aún no hay voz visible."
-  },
-  "hintCapture": {
-    "message": "La captura usa el panel de subtítulos que activas en la reunión."
-  },
   "hintUnsupported": {
     "message": "Abre Google Meet, Microsoft Teams o Zoom para comenzar."
   },
   "openSidePanel": { "message": "Abrir panel lateral" },
   "openNewTab": { "message": "Abrir en una pestaña nueva" },
-  "pairingToken": { "message": "Token de vinculación" },
-  "save": { "message": "Guardar" },
   "debug": { "message": "Depuración" },
   "dumpCaptionDom": { "message": "Volcar DOM de subtítulos" },
   "copyDiagnostics": { "message": "Copiar diagnóstico" },
-  "sourceSwitchRejected": {
-    "message": "Detén la grabación antes de cambiar de fuente."
-  },
   "diagnosticRequested": {
     "message": "Se solicitó una descarga de diagnóstico redactada."
   },
@@ -73,8 +56,20 @@
   },
   "sidePanelUnavailable": { "message": "No se pudo abrir el panel lateral." },
   "guiUnavailable": { "message": "No se pudo abrir Elsewise." },
-  "pairingSaved": { "message": "Token de vinculación guardado localmente." },
   "connectingServer": { "message": "Conectando con Elsewise…" },
   "startServer": { "message": "Inicia el servidor Elsewise" },
-  "retry": { "message": "Reintentar" }
+  "retry": { "message": "Reintentar" },
+  "sourceLabel": { "message": "Fuente" },
+  "stopping": { "message": "deteniendo" },
+  "degraded": { "message": "degradado" },
+  "sourceActive": { "message": "Activa" },
+  "sourceWaiting": { "message": "Esperando selección de sesión" },
+  "hintSourceManaged": {
+    "message": "Elsewise inicia esta fuente automáticamente para la sesión activa."
+  },
+  "pair": { "message": "Vincular" },
+  "cancel": { "message": "Cancelar" },
+  "pairingRequired": { "message": "Vinculación requerida" },
+  "pairingPending": { "message": "Esperando aprobación en Elsewise…" },
+  "pairingPaired": { "message": "Vinculado con Elsewise" }
 }

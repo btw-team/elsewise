@@ -30,7 +30,9 @@ from elsewise.persistence.models import (
     AgentThreadRecord,
     ButtonDefinitionRecord,
     CaptureSourceRecord,
+    PairedClientRecord,
     RecordingSegmentRecord,
+    SourceEpochRecord,
     UiEventRecord,
     UtteranceRecord,
 )
@@ -126,7 +128,7 @@ class SampleUtterance(ContextUtterance):
         self.speaker = "Speaker"
         self.text = text
         self.final = final
-        self.last_observed_at = NOW + timedelta(minutes=index)
+        self.last_received_at = NOW + timedelta(minutes=index)
 
 
 def test_context_strategies_freeze_whole_utterances_and_mark_untrusted() -> None:
@@ -326,30 +328,55 @@ async def test_agent_queue_initial_turn_fifo_stream_cancel_and_resume(tmp_path: 
         db.flush()
         button_id = button.id
     with database.transaction() as db:
-        db.add(
-            CaptureSourceRecord(
-                source_id="source",
-                installation_id="installation",
-                platform="google_meet",
-            )
+        client = PairedClientRecord(
+            installation_id="00000000-0000-4000-8000-000000000001",
+            browser_family="chrome",
+            display_name="Test Chrome",
+            credential_digest="0" * 64,
         )
+        db.add(client)
+        db.flush()
+        source = CaptureSourceRecord(
+            paired_client_id=client.id,
+            platform="google_meet",
+            driver_id="google_meet_captions",
+            driver_version="2.0.0",
+            tab_instance_id="tab-1",
+            capabilities=["captions"],
+        )
+        db.add(source)
+        db.flush()
         segment = db.scalar(
             select(RecordingSegmentRecord).where(RecordingSegmentRecord.session_id == session.id)
         )
         assert segment is not None
+        epoch = SourceEpochRecord(
+            source_id=source.id,
+            session_id=session.id,
+            segment_id=segment.id,
+            producer_epoch_id="producer-1",
+            state="running",
+        )
+        db.add(epoch)
+        db.flush()
         for index in range(2):
             db.add(
                 UtteranceRecord(
                     session_id=session.id,
                     segment_id=segment.id,
-                    source_id="source",
+                    source_epoch_id=epoch.id,
                     utterance_id=f"u-{index}",
                     revision=1,
                     speaker="Speaker",
                     text=f"text {index}",
                     final=True,
-                    first_observed_at=NOW + timedelta(seconds=index),
-                    last_observed_at=NOW + timedelta(seconds=index),
+                    origin_kind="browser_captions",
+                    origin_confidence=1.0,
+                    projection_version=1,
+                    first_session_offset_us=index * 1_000_000,
+                    last_session_offset_us=index * 1_000_000,
+                    first_received_at=NOW + timedelta(seconds=index),
+                    last_received_at=NOW + timedelta(seconds=index),
                     first_client_seq=index + 1,
                     last_client_seq=index + 1,
                 )

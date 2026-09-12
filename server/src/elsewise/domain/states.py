@@ -2,20 +2,18 @@ from enum import StrEnum
 
 
 class RecordingStatus(StrEnum):
-    IDLE = "idle"
+    STARTING = "starting"
     RUNNING = "running"
+    STOPPING = "stopping"
     STOPPED = "stopped"
 
 
-class CaptureStatus(StrEnum):
+class SourceStatus(StrEnum):
     NO_SOURCE = "no_source"
     WAITING_FOR_SOURCE = "waiting_for_source"
-    CONNECTING = "connecting"
-    CONNECTED = "connected"
     CAPTIONS_NOT_DETECTED = "captions_not_detected"
     CAPTURING = "capturing"
-    DISCONNECTED = "disconnected"
-    ERROR = "error"
+    DEGRADED = "degraded"
 
 
 class AgentStatus(StrEnum):

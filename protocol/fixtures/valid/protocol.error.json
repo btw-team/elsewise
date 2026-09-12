@@ -1,9 +1,7 @@
 {
   "type": "protocol.error",
-  "protocol_version": 1,
-  "event_id": "41daf524-c05f-434d-bd22-ddbe940434a1",
-  "code": "source_switch_rejected",
-  "message": "A source cannot be switched while recording is running.",
-  "recoverable": true,
-  "details": { "active_source_id": "document-7" }
+  "protocol_version": 2,
+  "code": "incompatible_protocol",
+  "message": "Protocol version 2 is required.",
+  "recoverable": false
 }

@@ -1,0 +1,29 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/pairing.pending.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "expires_at": {
+      "format": "date-time",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "request_id": {
+      "format": "uuid",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "type": {
+      "const": "pairing.pending",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": ["type", "protocol_version", "request_id", "expires_at"],
+  "title": "PairingPending",
+  "type": "object"
+}

@@ -19,7 +19,6 @@ from elsewise.launcher.settings_view import SettingsFrame
 from elsewise.launcher.single_instance import LauncherSingleInstance
 from elsewise.launcher.theme import THEMES, TOKENS, set_theme
 from elsewise.settings.config import SettingsStore
-from elsewise.settings.pairing import PairingManager
 
 
 def test_launcher_catalogs_have_baseline_parity_and_english_fallback() -> None:
@@ -56,17 +55,7 @@ def test_settings_helpers_do_not_shadow_customtkinter_widget_attributes() -> Non
     assert "_add_field_label" in SettingsFrame.__dict__
 
 
-def test_launcher_pairing_actions_share_and_persist_one_token(tmp_path: Path) -> None:
-    class Variable:
-        def __init__(self, value: str) -> None:
-            self.value = value
-
-        def get(self) -> str:
-            return self.value
-
-        def set(self, value: str) -> None:
-            self.value = value
-
+def test_launcher_pairing_action_calls_daemon_api() -> None:
     class Feedback:
         def __init__(self) -> None:
             self.changes: dict[str, object] = {}
@@ -74,60 +63,20 @@ def test_launcher_pairing_actions_share_and_persist_one_token(tmp_path: Path) ->
         def configure(self, **changes: object) -> None:
             self.changes.update(changes)
 
-    manager = PairingManager(tmp_path / "pairing.json")
-    manager.ensure()
-    initial = manager.token()
     frame: Any = object.__new__(SettingsFrame)
     frame.translator = Translator("en")
-    frame.pairing = manager
-    frame.pairing_token_var = Variable("manual-launcher-pairing-token")
     frame.feedback = Feedback()
     frame.after = lambda _delay, _callback: None
-    clipboard: list[str] = []
-    frame.clipboard_clear = clipboard.clear
-    frame.clipboard_append = clipboard.append
+    calls: list[tuple[str, str]] = []
 
-    frame._save_pairing_token()
-    assert manager.token() == "manual-launcher-pairing-token"
-    assert frame.feedback.changes["text"] == "Pairing token saved."
+    def pairing_action(action: str, target: str) -> bool:
+        calls.append((action, target))
+        return True
 
-    frame._copy_pairing_token()
-    assert clipboard == ["manual-launcher-pairing-token"]
-
-    frame._regenerate_pairing_token()
-    assert manager.token() == frame.pairing_token_var.get()
-    assert manager.token() not in {initial, "manual-launcher-pairing-token"}
-
-
-def test_launcher_rejects_an_invalid_manual_pairing_token(tmp_path: Path) -> None:
-    class Variable:
-        def get(self) -> str:
-            return "short"
-
-    class Feedback:
-        def __init__(self) -> None:
-            self.changes: dict[str, object] = {}
-
-        def configure(self, **changes: object) -> None:
-            self.changes.update(changes)
-
-    manager = PairingManager(tmp_path / "pairing.json")
-    manager.ensure()
-    original = manager.token()
-    frame: Any = object.__new__(SettingsFrame)
-    frame.translator = Translator("en")
-    frame.pairing = manager
-    frame.pairing_token_var = Variable()
-    frame.feedback = Feedback()
-    frame.after = lambda _delay, _callback: None
-
-    frame._save_pairing_token()
-
-    assert manager.token() == original
-    assert frame.feedback.changes == {
-        "text": "Enter a token containing 16 to 4096 characters.",
-        "text_color": TOKENS.danger,
-    }
+    frame.on_pairing_action = pairing_action
+    frame._pairing_action("approve", "request-1")
+    assert calls == [("approve", "request-1")]
+    assert frame.feedback.changes["text"] == "Pairing updated."
 
 
 def test_tab_navigation_maps_only_the_selected_frame() -> None:

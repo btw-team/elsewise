@@ -1,31 +1,101 @@
 {
   "cases": [
     {
+      "file": "valid/pairing.cancel.json",
+      "schema": "pairing.cancel",
+      "valid": true
+    },
+    {
+      "file": "valid/pairing.request.json",
+      "schema": "pairing.request",
+      "valid": true
+    },
+    {
+      "file": "valid/pairing.pending.json",
+      "schema": "pairing.pending",
+      "valid": true
+    },
+    {
+      "file": "valid/pairing.approved.json",
+      "schema": "pairing.approved",
+      "valid": true
+    },
+    {
+      "file": "valid/pairing.denied.json",
+      "schema": "pairing.denied",
+      "valid": true
+    },
+    {
+      "file": "valid/pairing.expired.json",
+      "schema": "pairing.expired",
+      "valid": true
+    },
+    {
+      "file": "valid/pairing.cancelled.json",
+      "schema": "pairing.cancelled",
+      "valid": true
+    },
+    {
+      "file": "valid/pairing.error.json",
+      "schema": "pairing.error",
+      "valid": true
+    },
+    {
       "file": "valid/client.hello.json",
       "schema": "client.hello",
       "valid": true
     },
     {
-      "file": "valid/source.status.json",
-      "schema": "source.status",
+      "file": "valid/server.hello.json",
+      "schema": "server.hello",
       "valid": true
     },
     {
-      "file": "valid/source.zoom.json",
-      "schema": "source.status",
+      "file": "valid/heartbeat.json",
+      "schema": "heartbeat",
       "valid": true
     },
     {
-      "file": "valid/utterance.upsert.json",
-      "schema": "utterance.upsert",
+      "file": "valid/heartbeat.ack.json",
+      "schema": "heartbeat.ack",
       "valid": true
     },
     {
-      "file": "valid/utterance.finalize.json",
-      "schema": "utterance.finalize",
+      "file": "valid/source.discovered.json",
+      "schema": "source.discovered",
+      "valid": true
+    },
+    {
+      "file": "valid/source.health.json",
+      "schema": "source.health",
+      "valid": true
+    },
+    {
+      "file": "valid/caption.upsert.json",
+      "schema": "caption.upsert",
+      "valid": true
+    },
+    {
+      "file": "valid/caption.finalize.json",
+      "schema": "caption.finalize",
       "valid": true
     },
     { "file": "valid/event.ack.json", "schema": "event.ack", "valid": true },
+    {
+      "file": "valid/source.start.json",
+      "schema": "source.start",
+      "valid": true
+    },
+    {
+      "file": "valid/source.stop.json",
+      "schema": "source.stop",
+      "valid": true
+    },
+    {
+      "file": "valid/source.command_ack.json",
+      "schema": "source.command_ack",
+      "valid": true
+    },
     { "file": "valid/ui.event.json", "schema": "ui.event", "valid": true },
     {
       "file": "valid/protocol.error.json",
@@ -38,38 +108,13 @@
       "valid": false
     },
     {
-      "file": "invalid/source.unknown-field.json",
-      "schema": "source.status",
+      "file": "invalid/source.raw-payload.json",
+      "schema": "source.discovered",
       "valid": false
     },
     {
-      "file": "invalid/upsert.empty-text.json",
-      "schema": "utterance.upsert",
-      "valid": false
-    },
-    {
-      "file": "invalid/upsert.bad-time.json",
-      "schema": "utterance.upsert",
-      "valid": false
-    },
-    {
-      "file": "invalid/finalize.zero-revision.json",
-      "schema": "utterance.finalize",
-      "valid": false
-    },
-    {
-      "file": "invalid/ack.unknown-result.json",
-      "schema": "event.ack",
-      "valid": false
-    },
-    {
-      "file": "invalid/ui.bad-payload.json",
-      "schema": "ui.event",
-      "valid": false
-    },
-    {
-      "file": "invalid/error.missing-message.json",
-      "schema": "protocol.error",
+      "file": "invalid/caption.empty-text.json",
+      "schema": "caption.upsert",
       "valid": false
     }
   ]

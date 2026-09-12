@@ -56,7 +56,6 @@ def test_spa_fallback_does_not_hide_unknown_api_routes(
     monkeypatch.setenv("ELSEWISE_WEB_DIST", str(web_dist))
     application = create_app(
         database_url="sqlite://",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
     )
 
@@ -84,7 +83,6 @@ def test_javascript_assets_use_browser_compatible_media_type(
     monkeypatch.setitem(mimetypes.types_map, ".js", "text/plain")
     application = create_app(
         database_url="sqlite://",
-        pairing_path=tmp_path / "pairing.json",
         settings_path=tmp_path / "settings.json",
     )
 

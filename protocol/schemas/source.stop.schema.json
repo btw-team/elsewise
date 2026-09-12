@@ -1,0 +1,66 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/source.stop.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "command_id": {
+      "format": "uuid",
+      "title": "Command Id",
+      "type": "string"
+    },
+    "deadline_ms": {
+      "maximum": 30000,
+      "minimum": 1,
+      "title": "Deadline Ms",
+      "type": "integer"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "segment_id": {
+      "format": "uuid",
+      "title": "Segment Id",
+      "type": "string"
+    },
+    "session_id": {
+      "format": "uuid",
+      "title": "Session Id",
+      "type": "string"
+    },
+    "source_epoch_id": {
+      "format": "uuid",
+      "title": "Source Epoch Id",
+      "type": "string"
+    },
+    "source_id": {
+      "format": "uuid",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "tab_instance_id": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Tab Instance Id",
+      "type": "string"
+    },
+    "type": {
+      "const": "source.stop",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "protocol_version",
+    "command_id",
+    "source_id",
+    "source_epoch_id",
+    "tab_instance_id",
+    "session_id",
+    "segment_id",
+    "deadline_ms",
+    "type"
+  ],
+  "title": "SourceStop",
+  "type": "object"
+}

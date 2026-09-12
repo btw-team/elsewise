@@ -43,7 +43,7 @@ export interface PlatformAdapter {
     onEvent: (event: AdapterUtteranceEvent) => void,
     onStatus: (status: AdapterStatus) => void,
   ): void;
-  stop(): void;
+  stop(finalize?: boolean): void;
   dumpDiagnostics(options?: {
     redactText?: boolean;
     redactNames?: boolean;

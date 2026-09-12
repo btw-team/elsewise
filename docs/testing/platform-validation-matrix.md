@@ -441,13 +441,12 @@ detached lifetime on that baseline.
 On at least one supported Windows, macOS, and Linux target:
 
 - open the web GUI through the launcher;
-- remove `pairing.json`, then verify that starting either the launcher or server
-  creates one token and that both Settings screens display the same value;
-- copy the token from both Settings screens and pair Chrome/Chromium and Firefox;
-- save a different valid manual token and verify that the old extension connections
-  are rejected until the replacement is saved in their popups;
-- regenerate the token, verify immediate old-token invalidation, and confirm the new
-  token persists across launcher and server restarts;
+- request pairing independently from Chrome/Chromium and Firefox, then approve one
+  request in the web GUI and one in the launcher;
+- verify each client reconnects with its own credential after launcher, daemon, and
+  browser restarts;
+- revoke one browser, verify its active connection closes immediately, and confirm
+  the other browser remains connected;
 - connect Chrome/Chromium and Firefox extensions to the local server;
 - open the GUI in a new tab and side panel where the browser supports it;
 - verify the offline `Start the Elsewise server` page;

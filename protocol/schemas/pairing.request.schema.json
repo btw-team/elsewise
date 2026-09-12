@@ -1,0 +1,55 @@
+{
+  "$id": "https://elsewise.local/protocol/v2/pairing.request.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "browser_family": {
+      "enum": ["chrome", "firefox"],
+      "title": "Browser Family",
+      "type": "string"
+    },
+    "display_name": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Display Name",
+      "type": "string"
+    },
+    "extension_version": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Extension Version",
+      "type": "string"
+    },
+    "installation_id": {
+      "format": "uuid",
+      "title": "Installation Id",
+      "type": "string"
+    },
+    "nonce": {
+      "maxLength": 128,
+      "minLength": 32,
+      "title": "Nonce",
+      "type": "string"
+    },
+    "protocol_version": {
+      "const": 2,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "type": {
+      "const": "pairing.request",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "protocol_version",
+    "nonce",
+    "installation_id",
+    "browser_family",
+    "display_name",
+    "extension_version"
+  ],
+  "title": "PairingRequest",
+  "type": "object"
+}

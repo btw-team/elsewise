@@ -18,19 +18,24 @@ const lightLogoUrl = new URL(
   import.meta.url,
 ).href;
 
+interface PopupSource {
+  tabId: number;
+  platform: string;
+  health: string;
+  speaker: string;
+  sourceEpochId?: string;
+  lastEventAt?: string;
+}
+
 interface PopupStatus {
   daemon: "connected" | "reconnecting" | "not_paired" | "unavailable";
+  pairing: "unpaired" | "pending" | "paired" | "denied" | "expired" | "error";
   pending: number;
   dropped: number;
-  pendingBytes: number;
   capacityPercent: number;
   bufferFull: boolean;
   session: Record<string, unknown> | null;
-  enabledTabId: number | null;
-  platform: string;
-  captions: string;
-  speaker: string;
-  lastEventAt: string | null;
+  sources: PopupSource[];
 }
 
 const element = <T extends HTMLElement>(id: string): T => {
@@ -39,40 +44,22 @@ const element = <T extends HTMLElement>(id: string): T => {
   return found as T;
 };
 
-const platformLabels: Partial<Record<string, MessageKey>> = {
-  synthetic: "syntheticHarness",
-  unsupported: "unsupportedPage",
-};
-
 const statusLabels: Partial<Record<string, MessageKey>> = {
   connected: "connected",
-  reconnecting: "disconnected",
+  reconnecting: "reconnecting",
   not_paired: "notPaired",
   unavailable: "unavailable",
-  idle: "idle",
   running: "running",
+  stopping: "stopping",
   stopped: "stopped",
   none: "none",
+  available: "captionsCapturingStatus",
+  waiting: "captionsOnEmptyStatus",
+  degraded: "degraded",
 };
 
-const captionLabels: Partial<Record<string, MessageKey>> = {
-  unknown: "notDetected",
-  off: "captionsOffStatus",
-  on_empty: "captionsOnEmptyStatus",
-  capturing: "captionsCapturingStatus",
-};
-
-const speakerLabels: Partial<Record<string, MessageKey>> = {
-  unknown: "unknown",
-  available: "speakerAvailable",
-  unavailable: "unavailable",
-};
-
-function localizedValue(
-  value: string,
-  labels: Partial<Record<string, MessageKey>>,
-): string {
-  const key = labels[value];
+function localizedValue(value: string): string {
+  const key = statusLabels[value];
   return key ? message(key) : value.replaceAll("_", " ");
 }
 
@@ -80,8 +67,8 @@ function platformLabel(value: string): string {
   if (value === "google_meet") return "Google Meet";
   if (value === "microsoft_teams") return "Microsoft Teams";
   if (value === "zoom") return "Zoom";
-  const key = platformLabels[value];
-  return key ? message(key) : value;
+  if (value === "synthetic") return message("syntheticHarness");
+  return message("unsupportedPage");
 }
 
 let activeTab:
@@ -90,23 +77,18 @@ let currentStatus: PopupStatus | null = null;
 
 function render(status: PopupStatus): void {
   currentStatus = status;
-  element("platform").textContent = platformLabel(status.platform);
-  element("capture").textContent =
-    status.enabledTabId === activeTab?.id
-      ? message("enabled")
-      : message("disabled");
-  element("captions").textContent = localizedValue(
-    status.captions,
-    captionLabels,
+  const source = status.sources.find((item) => item.tabId === activeTab?.id);
+  element("platform").textContent = platformLabel(
+    source?.platform ?? "unsupported",
   );
-  element("speaker").textContent = localizedValue(
-    status.speaker,
-    speakerLabels,
-  );
+  element("capture").textContent = localizedValue(source?.health ?? "none");
+  element("captions").textContent = source?.sourceEpochId
+    ? message("sourceActive")
+    : message("sourceWaiting");
+  element("speaker").textContent = localizedValue(source?.speaker ?? "unknown");
   element("buffer").textContent =
     `${status.pending} ${message("pending")} · ${status.dropped} ${message("dropped")}`;
-  const buffer = element("buffer");
-  buffer.classList.toggle("warning", status.capacityPercent >= 80);
+  element("buffer").classList.toggle("warning", status.capacityPercent >= 80);
   element("buffer-warning").textContent = status.bufferFull
     ? message("bufferFull")
     : status.capacityPercent >= 80
@@ -114,38 +96,28 @@ function render(status: PopupStatus): void {
       : "";
   element("session").textContent = String(
     status.session?.title ??
-      localizedValue(
-        String(status.session?.recording_status ?? "none"),
-        statusLabels,
-      ),
+      localizedValue(String(status.session?.recording_status ?? "none")),
   );
-  element("last-event").textContent = status.lastEventAt
-    ? new Date(status.lastEventAt).toLocaleTimeString(interfaceLanguage())
+  element("last-event").textContent = source?.lastEventAt
+    ? new Date(source.lastEventAt).toLocaleTimeString(interfaceLanguage())
     : message("never");
   const badge = element("daemon-badge");
-  badge.textContent = localizedValue(status.daemon, statusLabels);
-  badge.classList.remove(
-    "connected",
-    "reconnecting",
-    "not-paired",
-    "unavailable",
+  badge.textContent = localizedValue(status.daemon);
+  badge.className = `badge ${status.daemon.replace("_", "-")}`;
+  const pair = element<HTMLButtonElement>("pair");
+  const cancel = element<HTMLButtonElement>("cancel-pairing");
+  pair.hidden = status.pairing === "paired" || status.pairing === "pending";
+  cancel.hidden = status.pairing !== "pending";
+  element("pairing-state").textContent = message(
+    status.pairing === "paired"
+      ? "pairingPaired"
+      : status.pairing === "pending"
+        ? "pairingPending"
+        : "pairingRequired",
   );
-  badge.classList.add(status.daemon.replace("_", "-"));
-  const toggle = element<HTMLButtonElement>("toggle");
-  const supported = status.platform !== "unsupported";
-  toggle.disabled = !supported;
-  toggle.textContent =
-    status.enabledTabId === activeTab?.id
-      ? message("disableCapture")
-      : message("enableCapture");
-  element("hint").textContent =
-    status.captions === "off"
-      ? message("hintCaptionsOff")
-      : status.captions === "on_empty"
-        ? message("hintCaptionsEmpty")
-        : supported
-          ? message("hintCapture")
-          : message("hintUnsupported");
+  element("hint").textContent = source
+    ? message("hintSourceManaged")
+    : message("hintUnsupported");
 }
 
 element<HTMLImageElement>("brand-logo-dark").src = darkLogoUrl;
@@ -155,9 +127,8 @@ localizeDocument();
 function renderTheme(theme: UiTheme): void {
   for (const candidate of ["dark", "light"] as const) {
     const button = element<HTMLButtonElement>(`theme-${candidate}`);
-    const selected = candidate === theme;
-    button.classList.toggle("selected", selected);
-    button.setAttribute("aria-pressed", String(selected));
+    button.classList.toggle("selected", candidate === theme);
+    button.setAttribute("aria-pressed", String(candidate === theme));
   }
 }
 
@@ -175,36 +146,27 @@ async function refresh(): Promise<void> {
     currentWindow: true,
   });
   activeTab = tab ?? null;
-  const status = (await webExtension.runtime.sendMessage({
-    type: "popup.status",
-  })) as PopupStatus;
-  if (activeTab?.url) {
-    const hostname = new URL(activeTab.url).hostname;
-    if (hostname === "meet.google.com") status.platform = "google_meet";
-    else if (
-      hostname === "teams.live.com" ||
-      hostname.includes("teams.microsoft.com")
-    ) {
-      status.platform = "microsoft_teams";
-    } else if (hostname === "app.zoom.us") {
-      status.platform = "zoom";
-    } else if (hostname === "127.0.0.1") status.platform = "synthetic";
-    else status.platform = "unsupported";
-  }
-  render(status);
+  render(
+    (await webExtension.runtime.sendMessage({
+      type: "popup.status",
+    })) as PopupStatus,
+  );
 }
 
-element("toggle").addEventListener("click", async () => {
-  if (activeTab?.id === undefined || !currentStatus) return;
-  const enabled = currentStatus.enabledTabId === activeTab.id;
-  const response = (await webExtension.runtime.sendMessage({
-    type: enabled ? "capture.disable" : "capture.enable",
-    tabId: activeTab.id,
-    url: activeTab.url,
-  })) as Record<string, unknown> | undefined;
-  if (response?.error)
-    element("notice").textContent = message("sourceSwitchRejected");
-  else render(response as unknown as PopupStatus);
+element("pair").addEventListener("click", async () => {
+  render(
+    (await webExtension.runtime.sendMessage({
+      type: "pairing.begin",
+    })) as PopupStatus,
+  );
+});
+
+element("cancel-pairing").addEventListener("click", async () => {
+  render(
+    (await webExtension.runtime.sendMessage({
+      type: "pairing.cancel",
+    })) as PopupStatus,
+  );
 });
 
 element("dump").addEventListener("click", async () => {
@@ -222,10 +184,7 @@ element("copy").addEventListener("click", async () => {
 });
 
 element("open-side-panel").addEventListener("click", () => {
-  if (activeTab?.id === undefined) {
-    element("notice").textContent = message("currentTabUnavailable");
-    return;
-  }
+  if (activeTab?.id === undefined) return;
   void openGuiInSidePanel(activeTab.id).catch(() => {
     element("notice").textContent = message("sidePanelUnavailable");
   });
@@ -237,20 +196,5 @@ element("open-new-tab").addEventListener("click", () => {
   });
 });
 
-element<HTMLFormElement>("pairing").addEventListener(
-  "submit",
-  async (event) => {
-    event.preventDefault();
-    const token = element<HTMLInputElement>("token").value.trim();
-    if (!token) return;
-    const status = (await webExtension.runtime.sendMessage({
-      type: "pairing.save",
-      token,
-    })) as PopupStatus;
-    element<HTMLInputElement>("token").value = "";
-    element("notice").textContent = message("pairingSaved");
-    render(status);
-  },
-);
-
 void refresh();
+window.setInterval(() => void refresh(), 1000);

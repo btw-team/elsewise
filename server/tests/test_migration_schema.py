@@ -1,15 +1,18 @@
 from pathlib import Path
 
+import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
 from alembic.migration import MigrationContext
 from elsewise.persistence.database import Database
-from elsewise.persistence.models import Base
+from elsewise.persistence.models import Base, SessionRecord
 from elsewise.services.action_presets import ActionPresetService
 from elsewise.services.builtin_actions import BUILTIN_ACTIONS, BUILTIN_PRESETS
 from elsewise.services.buttons import ButtonService
+from elsewise.services.sessions import SessionService
 from sqlalchemy import inspect
+from sqlalchemy.exc import IntegrityError
 
 NEW_FACTORY_PRESETS = {
     "Language Practice": (
@@ -131,5 +134,21 @@ def test_initial_migration_can_downgrade_cleanly(tmp_path: Path) -> None:
     database = Database.from_path(database_path)
     try:
         assert inspect(database.engine).get_table_names() == ["alembic_version"]
+    finally:
+        database.dispose()
+
+
+def test_database_rejects_different_concurrent_active_session_states(tmp_path: Path) -> None:
+    database = Database.from_path(tmp_path / "active-invariant.sqlite3")
+    database.migrate()
+    first = SessionService(database).create(title="First")
+    second = SessionService(database).create(title="Second")
+    try:
+        with pytest.raises(IntegrityError), database.transaction() as db:
+            first_record = db.get(SessionRecord, first.id)
+            second_record = db.get(SessionRecord, second.id)
+            assert first_record is not None and second_record is not None
+            first_record.recording_status = "starting"
+            second_record.recording_status = "running"
     finally:
         database.dispose()

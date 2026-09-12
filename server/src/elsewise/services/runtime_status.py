@@ -14,7 +14,13 @@ from elsewise.agents.interface import AgentHealth
 from elsewise.agents.queue import AgentQueueManager
 from elsewise.observability import RuntimeDiagnostics
 from elsewise.persistence.database import Database
-from elsewise.persistence.models import AgentRunRecord, CaptureSourceRecord, SessionRecord
+from elsewise.persistence.models import (
+    AgentRunRecord,
+    CaptureSourceRecord,
+    PairedClientRecord,
+    PairingRequestRecord,
+    SessionRecord,
+)
 from elsewise.runtime.descriptor import RuntimeDescriptorStore
 from elsewise.settings.config import SettingsStore
 from elsewise.settings.paths import AppPaths
@@ -118,8 +124,8 @@ class RuntimeStatusService:
                 select(SessionRecord).where(SessionRecord.recording_status == "running").limit(1)
             )
             source = None
-            if session is not None and session.active_source_id:
-                source = db.get(CaptureSourceRecord, session.active_source_id)
+            if session is not None and session.selected_source_id:
+                source = db.get(CaptureSourceRecord, session.selected_source_id)
             run_counts = {
                 status: int(count)
                 for status, count in db.execute(
@@ -128,6 +134,20 @@ class RuntimeStatusService:
                     .group_by(AgentRunRecord.status)
                 ).tuples()
             }
+            pending_pairing = list(
+                db.scalars(
+                    select(PairingRequestRecord)
+                    .where(PairingRequestRecord.state == "pending")
+                    .order_by(PairingRequestRecord.created_at)
+                )
+            )
+            paired_clients = list(
+                db.scalars(
+                    select(PairedClientRecord)
+                    .where(PairedClientRecord.status == "active")
+                    .order_by(PairedClientRecord.created_at)
+                )
+            )
         commands = {
             "codex": configured.codex_executable,
             "claude": configured.claude_executable,
@@ -151,12 +171,34 @@ class RuntimeStatusService:
                     "count": diagnostics["ingest_clients_connected"],
                 },
             },
+            "pairing": {
+                "pending_requests": [
+                    {
+                        "id": item.id,
+                        "display_name": item.display_name,
+                        "browser_family": item.browser_family,
+                        "expires_at": item.expires_at.isoformat(),
+                    }
+                    for item in pending_pairing
+                ],
+                "clients": [
+                    {
+                        "id": item.id,
+                        "display_name": item.display_name,
+                        "browser_family": item.browser_family,
+                        "last_seen_at": (
+                            item.last_seen_at.isoformat() if item.last_seen_at else None
+                        ),
+                    }
+                    for item in paired_clients
+                ],
+            },
             "session": (
                 {
                     "id": session.id,
                     "title": session.title,
                     "recording_status": session.recording_status,
-                    "capture_status": session.capture_status,
+                    "source_status": session.source_status,
                 }
                 if session is not None
                 else None
@@ -164,7 +206,7 @@ class RuntimeStatusService:
             "source": (
                 {
                     "platform": source.platform,
-                    "captions_status": source.captions_status,
+                    "health_status": source.health_status,
                     "connected": source.connected,
                 }
                 if source is not None

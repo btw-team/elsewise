@@ -40,7 +40,7 @@ def test_schema_and_pydantic_fixture_parity(case: FixtureCase) -> None:
 
 
 def test_caption_text_hard_limit() -> None:
-    fixture = protocol_root() / "fixtures" / "valid" / "utterance.upsert.json"
+    fixture = protocol_root() / "fixtures" / "valid" / "caption.upsert.json"
     payload: dict[str, Any] = json.loads(fixture.read_text(encoding="utf-8"))
     payload["text"] = "x" * (MAX_CAPTION_TEXT_LENGTH + 1)
     with pytest.raises(JsonSchemaValidationError):

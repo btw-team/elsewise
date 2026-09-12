@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from functools import partial
 from math import ceil
 from tkinter import font as tkfont
 from typing import Any
@@ -12,7 +13,6 @@ from elsewise.settings.languages import (
     SUPPORTED_LANGUAGE_SET,
 )
 from elsewise.settings.launcher import LauncherSettingsStore
-from elsewise.settings.pairing import PairingManager
 
 
 class _WidthMatchedOptionMenu(ctk.CTkOptionMenu):  # type: ignore[misc]
@@ -78,10 +78,10 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
         translator: Translator,
         family: str,
         store: LauncherSettingsStore,
-        pairing: PairingManager,
         language: str,
         theme: str,
         server_running: Callable[[], bool],
+        on_pairing_action: Callable[[str, str], bool],
         on_language: Callable[[str], None],
         on_theme: Callable[[str], None],
         on_install_cli: Callable[[], str] | None = None,
@@ -91,8 +91,8 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
         self.translator = translator
         self.family = family
         self.store = store
-        self.pairing = pairing
         self.server_running = server_running
+        self.on_pairing_action = on_pairing_action
         self.on_language = on_language
         self.on_theme = on_theme
         settings = store.load()
@@ -234,44 +234,10 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
             wraplength=820,
             font=ctk.CTkFont(family=family, size=12),
         ).grid(row=1, column=0, padx=18, pady=(0, 10), sticky="ew")
-        ctk.CTkLabel(
-            pairing_card,
-            text=translator.text("pairing_token"),
-            text_color=TOKENS.text_soft,
-            anchor="w",
-            font=ctk.CTkFont(family=family, size=13),
-        ).grid(row=2, column=0, padx=18, pady=(0, 6), sticky="ew")
-        self.pairing_token_var = ctk.StringVar(value=pairing.token())
-        self.pairing_token_entry = ctk.CTkEntry(
-            pairing_card,
-            textvariable=self.pairing_token_var,
-            fg_color=TOKENS.canvas,
-            border_color=TOKENS.border,
-            text_color=TOKENS.text,
-            font=ctk.CTkFont(family=family, size=12),
-        )
-        self.pairing_token_entry.grid(row=3, column=0, padx=18, pady=(0, 12), sticky="ew")
-        pairing_actions = ctk.CTkFrame(pairing_card, fg_color="transparent")
-        pairing_actions.grid(row=4, column=0, padx=18, pady=(0, 16), sticky="ew")
-        pairing_actions.grid_columnconfigure((0, 1, 2), weight=1)
-        copy_button = self._action_button(
-            pairing_actions,
-            translator.text("copy_token"),
-            self._copy_pairing_token,
-        )
-        regenerate_button = self._action_button(
-            pairing_actions,
-            translator.text("regenerate_token"),
-            self._regenerate_pairing_token,
-        )
-        save_button = self._action_button(
-            pairing_actions,
-            translator.text("save"),
-            self._save_pairing_token,
-        )
-        copy_button.grid(row=0, column=0, padx=(0, 8), sticky="ew")
-        regenerate_button.grid(row=0, column=1, padx=8, sticky="ew")
-        save_button.grid(row=0, column=2, padx=(8, 0), sticky="ew")
+        self.pairing_rows = ctk.CTkFrame(pairing_card, fg_color="transparent")
+        self.pairing_rows.grid(row=2, column=0, padx=18, pady=(0, 16), sticky="ew")
+        self.pairing_rows.grid_columnconfigure(0, weight=1)
+        self.set_pairing({})
 
         self.feedback = ctk.CTkLabel(
             self,
@@ -300,28 +266,75 @@ class SettingsFrame(ctk.CTkScrollableFrame):  # type: ignore[misc]
         self.store.update(**changes)
         self._show_feedback(self.translator.text("saved"))
 
-    def _copy_pairing_token(self) -> None:
-        token = self.pairing_token_var.get().strip()
-        if not token:
-            self._show_feedback(self.translator.text("pairing_invalid"), error=True)
+    def set_pairing(self, payload: dict[str, Any]) -> None:
+        for child in self.pairing_rows.winfo_children():
+            child.destroy()
+        requests = payload.get("pending_requests", [])
+        clients = payload.get("clients", [])
+        row = 0
+        if not requests and not clients:
+            ctk.CTkLabel(
+                self.pairing_rows,
+                text=self.translator.text("pairing_none"),
+                text_color=TOKENS.text_muted,
+                anchor="w",
+            ).grid(row=row, column=0, sticky="ew")
             return
-        self.clipboard_clear()
-        self.clipboard_append(token)
-        self._show_feedback(self.translator.text("pairing_copied"))
+        for request in requests if isinstance(requests, list) else []:
+            if not isinstance(request, dict):
+                continue
+            line = ctk.CTkFrame(self.pairing_rows, fg_color="transparent")
+            line.grid(row=row, column=0, pady=3, sticky="ew")
+            line.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(
+                line,
+                text=(
+                    f"{request.get('display_name', 'Browser')} · "
+                    f"{request.get('browser_family', '')}"
+                ),
+                text_color=TOKENS.text_soft,
+                anchor="w",
+            ).grid(row=0, column=0, sticky="ew")
+            request_id = str(request.get("id", ""))
+            self._action_button(
+                line,
+                self.translator.text("pairing_allow"),
+                partial(self._pairing_action, "approve", request_id),
+            ).grid(row=0, column=1, padx=4)
+            self._action_button(
+                line,
+                self.translator.text("pairing_deny"),
+                partial(self._pairing_action, "deny", request_id),
+            ).grid(row=0, column=2, padx=4)
+            row += 1
+        for client in clients if isinstance(clients, list) else []:
+            if not isinstance(client, dict):
+                continue
+            line = ctk.CTkFrame(self.pairing_rows, fg_color="transparent")
+            line.grid(row=row, column=0, pady=3, sticky="ew")
+            line.grid_columnconfigure(0, weight=1)
+            ctk.CTkLabel(
+                line,
+                text=(
+                    f"{client.get('display_name', 'Browser')} · {client.get('browser_family', '')}"
+                ),
+                text_color=TOKENS.text_soft,
+                anchor="w",
+            ).grid(row=0, column=0, sticky="ew")
+            client_id = str(client.get("id", ""))
+            self._action_button(
+                line,
+                self.translator.text("pairing_revoke"),
+                partial(self._pairing_action, "revoke", client_id),
+            ).grid(row=0, column=1, padx=4)
+            row += 1
 
-    def _regenerate_pairing_token(self) -> None:
-        token = self.pairing.regenerate()
-        self.pairing_token_var.set(token)
-        self._show_feedback(self.translator.text("pairing_regenerated"))
-
-    def _save_pairing_token(self) -> None:
-        try:
-            self.pairing.save(self.pairing_token_var.get())
-        except ValueError:
-            self._show_feedback(self.translator.text("pairing_invalid"), error=True)
-            return
-        self.pairing_token_var.set(self.pairing.token())
-        self._show_feedback(self.translator.text("pairing_saved"))
+    def _pairing_action(self, action: str, target_id: str) -> None:
+        success = self.on_pairing_action(action, target_id)
+        self._show_feedback(
+            self.translator.text("pairing_action_done" if success else "pairing_action_failed"),
+            error=not success,
+        )
 
     def _show_feedback(self, text: str, *, error: bool = False) -> None:
         self.feedback.configure(text=text, text_color=TOKENS.danger if error else TOKENS.success)

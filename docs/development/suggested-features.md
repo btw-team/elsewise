@@ -19,7 +19,7 @@ Platform release verification is tracked in
         without credentials.
   - [ ] Include web GUI and extension connection counters.
   - [ ] Exclude transcripts, prompts, agent responses, API keys, authorization
-        headers, pairing tokens, runtime control tokens, and environment dumps.
+        headers, browser credentials, runtime control credentials, and environment dumps.
   - [ ] Preserve the participant-name obfuscation used by normal logs.
   - [ ] Show the exact archive contents before saving.
   - [ ] Require an explicit user action and never upload the archive automatically.

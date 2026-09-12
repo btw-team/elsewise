@@ -1,8 +1,23 @@
-export interface PairingSettings {
-  token: string;
-  masked_token: string;
+export interface PairingRequest {
+  id: string;
+  installation_id: string;
+  browser_family: string;
+  display_name: string;
+  extension_version: string;
+  state: string;
   created_at: string;
-  generation: number;
+  expires_at: string;
+}
+
+export interface PairedClient {
+  id: string;
+  installation_id: string;
+  browser_family: string;
+  display_name: string;
+  status: string;
+  created_at: string;
+  last_seen_at: string | null;
+  revoked_at: string | null;
 }
 
 export interface SessionSummary {
@@ -15,11 +30,10 @@ export interface SessionSummary {
   agent_provider: AgentProviderId;
   agent_model: string | null;
   agent_reasoning_effort: string | null;
-  recording_status: "idle" | "running" | "stopped";
-  capture_status: string;
+  recording_status: "starting" | "running" | "stopping" | "stopped";
+  source_status: string;
   agent_status: string;
-  enabled_source_id: string | null;
-  active_source_id: string | null;
+  selected_source_id: string | null;
   allow_workspace_write: boolean;
   allow_network: boolean;
   requested_agent_cwd: string | null;
@@ -37,15 +51,17 @@ export interface Utterance {
   id: string;
   session_id: string;
   segment_id: string;
-  source_id: string;
+  source_epoch_id: string;
   utterance_id: string;
   revision: number;
   speaker: string | null;
   speaker_role: "self" | "other" | "unknown";
   text: string;
   final: boolean;
-  first_observed_at: string;
-  last_observed_at: string;
+  first_session_offset_us: number;
+  last_session_offset_us: number;
+  first_received_at: string;
+  last_received_at: string;
   first_client_seq: number;
   last_client_seq: number;
 }
@@ -54,22 +70,28 @@ export interface Segment {
   id: string;
   session_id: string;
   sequence: number;
-  source_id: string | null;
   started_at: string;
   stopped_at: string | null;
   stop_reason: string | null;
 }
 
 export interface CaptureSource {
-  source_id: string;
+  id: string;
+  paired_client_id: string;
+  source_kind: string;
   platform: string;
-  meeting_key: string | null;
-  meeting_title: string | null;
-  enabled: boolean;
+  driver_id: string;
+  driver_version: string;
+  tab_instance_id: string;
+  capabilities: string[];
+  available: boolean;
   connected: boolean;
-  captions_status: string;
-  speaker_detection: string | null;
+  health_status: string;
+  last_error_code: string | null;
   last_event_at: string | null;
+  client_display_name?: string | null;
+  browser_family?: string | null;
+  tab_ordinal?: number | null;
 }
 
 export interface GlobalSnapshot {
@@ -232,7 +254,7 @@ export interface AgentModelOption {
 
 export interface UiEvent {
   type: "ui.event";
-  protocol_version: 1;
+  protocol_version: 2;
   event_id: number;
   event_type: string;
   aggregate_id: string | null;

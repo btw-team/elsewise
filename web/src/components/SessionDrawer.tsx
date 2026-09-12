@@ -126,9 +126,7 @@ export function SessionDrawer({
   );
   const editing = mode === "edit" && session !== null;
   const sessionRunning = editing && session.recording_status === "running";
-  const sessionHasStarted =
-    editing &&
-    (session.started_at !== null || session.recording_status === "stopped");
+  const sessionHasStarted = editing && session.started_at !== null;
   const temporarilyLockedReason = sessionRunning
     ? t("stopSessionToEdit")
     : null;

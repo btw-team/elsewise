@@ -38,7 +38,6 @@ from elsewise.runtime.signals import shutdown_signal_handlers
 from elsewise.settings.config import SettingsStore
 from elsewise.settings.languages import SUPPORTED_LANGUAGE_SET
 from elsewise.settings.launcher import LauncherSettingsStore
-from elsewise.settings.pairing import PairingManager
 from elsewise.settings.paths import AppPaths
 
 _LOGGER = logging.getLogger("elsewise.launcher")
@@ -86,8 +85,6 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         )
         self.launcher_settings_store = LauncherSettingsStore(self.paths.config / "launcher.json")
         self.launcher_settings_store.load()
-        self.pairing_manager = PairingManager(self.paths.config / "pairing.json")
-        self.pairing_manager.ensure()
         self.update_checker = UpdateChecker(paths.cache / "updates.json", __version__)
         self.update_result = self.update_checker.cached_result()
         self.update_lock = threading.Lock()
@@ -247,16 +244,18 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                 translator=self.translator,
                 family=self.family,
                 store=self.launcher_settings_store,
-                pairing=self.pairing_manager,
                 language=self.translator.language,
                 theme=self.ui_theme,
                 server_running=lambda: self.current_status.state == "running",
+                on_pairing_action=self._pairing_action,
                 on_language=self._change_language,
                 on_theme=self._change_theme,
                 on_install_cli=self._install_cli if sys.platform == "darwin" else None,
                 on_remove_cli=self._remove_cli if sys.platform == "darwin" else None,
             )
             self.settings_frame = frame
+            pairing = self.runtime_payload.get("pairing")
+            frame.set_pairing(pairing if isinstance(pairing, dict) else {})
         elif key == "about":
             frame = AboutFrame(
                 self._content,
@@ -414,6 +413,10 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                 if isinstance(payload, dict):
                     self.runtime_payload = payload
                     self.overview.set_runtime(payload)
+                    settings_frame = self.__dict__.get("settings_frame")
+                    if settings_frame is not None:
+                        pairing = payload.get("pairing")
+                        settings_frame.set_pairing(pairing if isinstance(pairing, dict) else {})
                     shared = payload.get("settings")
                     language = shared.get("ui_language") if isinstance(shared, dict) else None
                     theme = shared.get("ui_theme") if isinstance(shared, dict) else None
@@ -482,6 +485,11 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         if self.action_runner.run(action):
             self.pending_action = name
             self.overview.set_lifecycle(self.current_status, busy=True)
+
+    def _pairing_action(self, action: str, target_id: str) -> bool:
+        success = self.controller.pairing_action(action, target_id)
+        self.monitor.request_refresh()
+        return success
 
     def _finish_action(self, status: ServerStatus) -> None:
         action = self.pending_action

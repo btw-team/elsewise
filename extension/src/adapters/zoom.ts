@@ -276,7 +276,7 @@ export class ZoomAdapter implements PlatformAdapter {
     }
   }
 
-  stop(): void {
+  stop(finalize = false): void {
     this.#overlayObserver?.disconnect();
     this.#lifecycleObserver?.disconnect();
     this.#overlayObserver = null;
@@ -286,6 +286,7 @@ export class ZoomAdapter implements PlatformAdapter {
     for (const state of this.#segments.values()) {
       if (state.idleTimer) clearTimeout(state.idleTimer);
       if (state.removalTimer) clearTimeout(state.removalTimer);
+      if (finalize) this.#finalize(state);
     }
     this.#segments.clear();
     this.#suppressedReplayRoots.clear();

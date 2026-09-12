@@ -81,9 +81,23 @@ export class SyntheticAdapter implements PlatformAdapter {
     );
   }
 
-  stop(): void {
+  stop(finalize = false): void {
     this.#observer?.disconnect();
     this.#observer = null;
+    if (finalize) {
+      for (const [utteranceId, state] of this.#utterances) {
+        if (state.final) continue;
+        state.final = true;
+        this.#onEvent?.({
+          type: "finalize",
+          utteranceId,
+          revision: state.revision,
+          speaker: state.speaker,
+          text: state.text,
+          observedAt: new Date().toISOString(),
+        });
+      }
+    }
   }
 
   dumpDiagnostics(
