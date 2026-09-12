@@ -2,11 +2,18 @@
 .venv/
 __pycache__/
 *.py[cod]
+*.egg-info/
+.eggs/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.hypothesis/
+.tox/
+.nox/
+.uv-cache/
 .coverage
 .coverage.*
+coverage.xml
 htmlcov/
 
 # JavaScript
@@ -15,21 +22,68 @@ dist/
 build/
 packaging/generated/
 coverage/
+playwright-report/
+test-results/
+blob-report/
+.nyc_output/
+.vite/
+.eslintcache
 *.tsbuildinfo
 
+# Secrets and machine-local configuration
+.env
+.env.*
+!.env.example
+!.env.*.example
+.envrc
+.direnv/
+.netrc
+.npmrc
+.pypirc
+.secrets/
+secrets/
+credentials/
+credentials*.json
+secrets*.json
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+
 # Runtime data (canonical data belongs under platformdirs, never in the repo)
+*.sqlite
+*.sqlite-*
 *.sqlite3
 *.sqlite3-*
+*.db
+*.db-*
+*.log
+*.pid
+*.sock
 /exports/
 /diagnostics/
 /runtime/
+/logs/
 
 # Local browser captures may contain meeting names, captions, and DOM metadata.
 output/playwright/
 .playwright-cli/
 
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*~
+
 # Editors and OS
 .DS_Store
+Thumbs.db
+Desktop.ini
 .idea/
 .vscode/
 
