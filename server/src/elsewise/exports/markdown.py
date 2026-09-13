@@ -3,6 +3,7 @@ import html
 import os
 import shutil
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +19,7 @@ from elsewise.persistence.models import (
     RecordingSegmentRecord,
     SessionRecord,
     UtteranceRecord,
+    UtteranceSpeakerAssignmentRecord,
 )
 from elsewise.services.errors import ServiceError
 from elsewise.services.outbox import emit_ui_event
@@ -79,7 +81,9 @@ def render_captions(
     session: SessionRecord,
     segments: list[RecordingSegmentRecord],
     utterances: list[UtteranceRecord],
+    speaker_labels: Mapping[str, str | None] | None = None,
 ) -> str:
+    labels = speaker_labels or {}
     by_segment: dict[str, list[UtteranceRecord]] = {}
     for utterance in utterances:
         by_segment.setdefault(utterance.segment_id, []).append(utterance)
@@ -107,7 +111,7 @@ def render_captions(
             if not utterance.final and session.recording_status != "running":
                 continue
             partial = " [partial]" if not utterance.final else ""
-            speaker = _safe(utterance.speaker or "Unknown speaker")
+            speaker = _safe(labels.get(utterance.id) or "Unknown speaker")
             text = _safe(utterance.text)
             lines.append(
                 f"- `{_timestamp(utterance.last_received_at)}` **{speaker}:** {text}{partial}"
@@ -185,6 +189,12 @@ class ExportService:
                 )
                 for utterance in partials:
                     utterance.final = True
+                    utterance.finalization_state = "durable_final"
+                    assignment = db.scalar(
+                        select(UtteranceSpeakerAssignmentRecord).where(
+                            UtteranceSpeakerAssignmentRecord.utterance_id == utterance.id
+                        )
+                    )
                     emit_ui_event(
                         db,
                         "utterance.finalized",
@@ -193,7 +203,8 @@ class ExportService:
                             "session_id": session_id,
                             "utterance_id": utterance.utterance_id,
                             "revision": utterance.revision,
-                            "speaker": utterance.speaker,
+                            "speaker": assignment.display_label if assignment else None,
+                            "speaker_role": assignment.speaker_role if assignment else "unknown",
                             "text": utterance.text,
                             "final": True,
                             "reason": "export",
@@ -216,6 +227,16 @@ class ExportService:
                     )
                 )
             )
+            speaker_labels = {
+                assignment.utterance_id: assignment.display_label
+                for assignment in db.scalars(
+                    select(UtteranceSpeakerAssignmentRecord).where(
+                        UtteranceSpeakerAssignmentRecord.utterance_id.in_(
+                            {utterance.id for utterance in utterances}
+                        )
+                    )
+                )
+            }
             runs = list(
                 db.scalars(
                     select(AgentRunRecord)
@@ -235,7 +256,7 @@ class ExportService:
                 if run_ids
                 else []
             )
-            captions = render_captions(session, segments, utterances)
+            captions = render_captions(session, segments, utterances, speaker_labels)
             agent = render_agent(session, runs, messages)
 
         directory = _session_directory(self.export_root, session_id)

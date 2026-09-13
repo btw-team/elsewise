@@ -14,6 +14,7 @@ def main() -> None:
         "elsewise/migrations/env.py",
         "elsewise/migrations/versions/0001_initial.py",
         "elsewise/protocol/schema_files/client.hello.schema.json",
+        "elsewise/protocol/audio_files/v1.json",
         "elsewise/web_dist/index.html",
     }
     with ZipFile(wheel) as archive:

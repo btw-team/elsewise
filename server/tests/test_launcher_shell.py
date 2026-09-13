@@ -17,7 +17,9 @@ from elsewise.launcher.i18n import CATALOGS, Translator
 from elsewise.launcher.overview import OverviewFrame
 from elsewise.launcher.settings_view import SettingsFrame
 from elsewise.launcher.single_instance import LauncherSingleInstance
+from elsewise.launcher.store import LauncherStore
 from elsewise.launcher.theme import THEMES, TOKENS, set_theme
+from elsewise.runtime.controller import ServerStatus
 from elsewise.settings.config import SettingsStore
 
 
@@ -273,7 +275,7 @@ def test_launcher_theme_change_uses_locked_settings_file_when_server_is_stopped(
 ) -> None:
     application: Any = object.__new__(LauncherApplication)
     application.paths = SimpleNamespace(config=tmp_path)
-    application.current_status = SimpleNamespace(state="stopped", url=None)
+    application.store = LauncherStore(ServerStatus("stopped"))
 
     application._save_global_settings({"ui_theme": "light"})
 
@@ -293,7 +295,7 @@ def test_launcher_runtime_theme_update_uses_the_shared_interface_rebuild() -> No
             "payload": {"settings": {"ui_language": "en", "ui_theme": "light"}},
         }
     )
-    application.runtime_payload = {}
+    application.store = LauncherStore(ServerStatus("running"))
     application.overview = Overview()
     application.translator = Translator("en")
     application.ui_theme = "dark"
@@ -341,7 +343,8 @@ def test_launcher_final_close_is_bounded_and_idempotent() -> None:
     application.closing = False
     application.restart_waiting = False
     application.restart_cancel = threading.Event()
-    application.monitor = Stoppable()
+    application.runtime_client = Stoppable()
+    application.runtime_client.stop_monitoring = application.runtime_client.stop
     application.log_worker = Stoppable()
     application.instance = Instance()
     quit_calls: list[bool] = []
@@ -352,7 +355,7 @@ def test_launcher_final_close_is_bounded_and_idempotent() -> None:
 
     assert application.closed is True
     assert application.closing is True
-    assert application.monitor.calls == 1
+    assert application.runtime_client.calls == 1
     assert application.log_worker.calls == 1
     assert application.instance.calls == 1
     assert quit_calls == [True]

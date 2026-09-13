@@ -11,16 +11,21 @@ WEB_DIST = ROOT / "web" / "dist"
 ASSETS = ROOT / "web" / "src" / "assets"
 MIGRATIONS = ROOT / "server" / "src" / "elsewise" / "migrations"
 GENERATED = ROOT / "packaging" / "generated"
+HELPER_NAME = "elsewise-audio.exe" if sys.platform == "win32" else "elsewise-audio"
+HELPER = ROOT / "target" / "release" / HELPER_NAME
 with (ROOT / "pyproject.toml").open("rb") as version_file:
     PRODUCT_VERSION = str(tomllib.load(version_file)["project"]["version"])
 
 if not (WEB_DIST / "index.html").is_file():
     raise SystemExit("Build web/dist before running PyInstaller")
+if not HELPER.is_file():
+    raise SystemExit("Build elsewise-audio with `cargo build --workspace --release` first")
 
 common_datas = [
     (str(WEB_DIST), "elsewise/web_dist"),
     (str(MIGRATIONS), "elsewise/migrations"),
     (str(ROOT / "protocol" / "schemas"), "elsewise/protocol/schema_files"),
+    (str(ROOT / "protocol" / "audio"), "elsewise/protocol/audio_files"),
     (str(ASSETS / "elsewise-logo-dark.png"), "elsewise/assets"),
     (str(ASSETS / "elsewise-logo-light.png"), "elsewise/assets"),
     (str(ASSETS / "white-bunny-avatar.png"), "elsewise/assets"),
@@ -44,7 +49,7 @@ def analysis(script):
     return Analysis(
         [str(script)],
         pathex=[str(ROOT / "server" / "src")],
-        binaries=[],
+        binaries=[(str(HELPER), "elsewise/bin")],
         datas=common_datas,
         hiddenimports=hiddenimports,
         hookspath=[],
@@ -124,7 +129,7 @@ if sys.platform == "darwin":
             "CFBundleDisplayName": "Elsewise",
             "CFBundleName": "Elsewise",
             "CFBundleExecutable": "elsewise-gui",
-            "LSMinimumSystemVersion": "12.0",
+            "LSMinimumSystemVersion": "14.6",
             "NSHighResolutionCapable": True,
         },
     )

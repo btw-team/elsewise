@@ -25,14 +25,16 @@ from elsewise.launcher.details import DetailsFrame
 from elsewise.launcher.i18n import Translator
 from elsewise.launcher.log_viewer import LogTailWorker
 from elsewise.launcher.macos_cli import MacCliManager
-from elsewise.launcher.monitor import LifecycleActionRunner, MonitorEvent, RuntimeMonitor
+from elsewise.launcher.monitor import LifecycleActionRunner, MonitorEvent
 from elsewise.launcher.notifications import NativeNotifier
 from elsewise.launcher.overview import OverviewFrame
+from elsewise.launcher.runtime_client import RuntimeClient
 from elsewise.launcher.settings_view import SettingsFrame
 from elsewise.launcher.single_instance import LauncherSingleInstance
+from elsewise.launcher.store import LauncherStore
 from elsewise.launcher.theme import TOKENS, UiTheme, current_theme, font_family, set_theme
 from elsewise.launcher.updates import UpdateChecker, UpdateResult
-from elsewise.runtime.controller import DaemonController, ServerStatus
+from elsewise.runtime.controller import ServerStatus
 from elsewise.runtime.logging import configure_launcher_logging
 from elsewise.runtime.signals import shutdown_signal_handlers
 from elsewise.settings.config import SettingsStore
@@ -67,8 +69,8 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         self.activation_queue: queue.SimpleQueue[bool] = queue.SimpleQueue()
         self.event_queue: queue.SimpleQueue[MonitorEvent] = queue.SimpleQueue()
         self.family = font_family(self)
-        self.controller = DaemonController(paths)
-        self.monitor = RuntimeMonitor(self.controller, self.event_queue.put)
+        self.runtime_client = RuntimeClient(paths, self.event_queue.put)
+        self.store = LauncherStore(ServerStatus("stopped", url=self.runtime_client.url))
         self.log_worker = LogTailWorker(
             paths.diagnostics / "server.log",
             lambda lines, reset: self.event_queue.put(
@@ -88,9 +90,6 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         self.update_checker = UpdateChecker(paths.cache / "updates.json", __version__)
         self.update_result = self.update_checker.cached_result()
         self.update_lock = threading.Lock()
-        self.runtime_payload: dict[str, Any] = {}
-        self.current_status = ServerStatus("stopped", url=self.controller.url)
-        self.pending_action = ""
         self.restart_waiting = False
         self.restart_cancel = threading.Event()
         self.closing = False
@@ -119,6 +118,18 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         self.after(0, self._show_recovery_notice)
         self.after(100, self._drain_activation_queue)
         self.after(100, self._drain_event_queue)
+
+    @property
+    def runtime_payload(self) -> dict[str, Any]:
+        return self.store.state.runtime_payload
+
+    @property
+    def current_status(self) -> ServerStatus:
+        return self.store.state.lifecycle
+
+    @property
+    def pending_action(self) -> str:
+        return self.store.state.pending_action
 
     def _build(self) -> None:
         self._build_generation += 1
@@ -207,8 +218,8 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
             translator=self.translator,
             family=self.family,
             links=self.links,
-            on_start=lambda: self._run_action("start", self.controller.start),
-            on_stop=lambda: self._run_action("stop", self.controller.stop),
+            on_start=lambda: self._run_action("start", self.runtime_client.start),
+            on_stop=lambda: self._run_action("stop", self.runtime_client.stop),
             on_restart=self._request_restart,
             on_open=self._open_web_gui,
             on_copy=self._copy_address,
@@ -310,11 +321,14 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         return "break"
 
     def start_services(self) -> None:
-        self.monitor.start()
+        self.runtime_client.start_monitoring()
         self.log_worker.start()
         launcher_settings = self.launcher_settings_store.load()
-        if launcher_settings.start_server_on_launch and self.controller.status().state == "stopped":
-            self._run_action("start", self.controller.start)
+        if (
+            launcher_settings.start_server_on_launch
+            and self.runtime_client.status().state == "stopped"
+        ):
+            self._run_action("start", self.runtime_client.start)
         if launcher_settings.check_updates_on_launch:
             self._request_update_check(manual=False)
 
@@ -411,7 +425,8 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
             if kind == "runtime":
                 payload = event.get("payload")
                 if isinstance(payload, dict):
-                    self.runtime_payload = payload
+                    if not self.store.apply_runtime(payload):
+                        continue
                     self.overview.set_runtime(payload)
                     settings_frame = self.__dict__.get("settings_frame")
                     if settings_frame is not None:
@@ -463,7 +478,7 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                 status = event.get("status")
                 if isinstance(status, ServerStatus):
                     previous = self.current_status
-                    self.current_status = status
+                    self.store.apply_lifecycle(status)
                     self.overview.set_lifecycle(status, busy=False)
                     if (
                         kind == "lifecycle"
@@ -483,18 +498,17 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
 
     def _run_action(self, name: str, action: Callable[[], ServerStatus]) -> None:
         if self.action_runner.run(action):
-            self.pending_action = name
+            self.store.begin_action(name)
             self.overview.set_lifecycle(self.current_status, busy=True)
 
     def _pairing_action(self, action: str, target_id: str) -> bool:
-        success = self.controller.pairing_action(action, target_id)
-        self.monitor.request_refresh()
+        success = self.runtime_client.pairing_action(action, target_id)
+        self.runtime_client.request_refresh()
         return success
 
     def _finish_action(self, status: ServerStatus) -> None:
-        action = self.pending_action
-        self.pending_action = ""
-        self.monitor.request_refresh()
+        action = self.store.finish_action()
+        self.runtime_client.request_refresh()
         if self.restart_waiting:
             self.restart_waiting = False
             self.overview.set_restart_waiting(False)
@@ -516,7 +530,7 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                         (self.translator.text("cancel"), self._cancel_close, False),
                         (
                             self.translator.text("force_stop"),
-                            lambda: self._run_action("force_close", self.controller.force_stop),
+                            lambda: self._run_action("force_close", self.runtime_client.force_stop),
                             True,
                         ),
                     ),
@@ -530,7 +544,7 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                     (self.translator.text("cancel"), lambda: None, False),
                     (
                         self.translator.text("force_stop"),
-                        lambda: self._run_action("force_stop", self.controller.force_stop),
+                        lambda: self._run_action("force_stop", self.runtime_client.force_stop),
                         True,
                     ),
                 ),
@@ -554,7 +568,7 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                     (self.translator.text("cancel"), lambda: None, False),
                     (
                         self.translator.text("restart_now"),
-                        lambda: self._run_action("restart", self.controller.restart),
+                        lambda: self._run_action("restart", self.runtime_client.restart),
                         True,
                     ),
                 ),
@@ -568,30 +582,30 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
                     (self.translator.text("wait_restart"), self._wait_and_restart, False),
                     (
                         self.translator.text("restart_now"),
-                        lambda: self._run_action("restart", self.controller.restart),
+                        lambda: self._run_action("restart", self.runtime_client.restart),
                         True,
                     ),
                 ),
             )
         else:
-            self._run_action("restart", self.controller.restart)
+            self._run_action("restart", self.runtime_client.restart)
 
     def _wait_and_restart(self) -> None:
         self.restart_cancel.clear()
         self.restart_waiting = True
 
         def wait() -> ServerStatus:
-            if not self.controller.set_agent_drain(True):
+            if not self.runtime_client.set_agent_drain(True):
                 return ServerStatus("error", message="Unable to pause new agent work.")
             while not self.restart_cancel.wait(0.5):
-                payload = self.controller.runtime_status_payload()
+                payload = self.runtime_client.runtime_status_payload()
                 work = payload.get("agent_work", {}) if payload else {}
                 if isinstance(work, dict) and not (
                     int(work.get("queued", 0)) + int(work.get("running", 0))
                 ):
-                    return self.controller.restart()
-            self.controller.set_agent_drain(False)
-            return self.controller.status()
+                    return self.runtime_client.restart()
+            self.runtime_client.set_agent_drain(False)
+            return self.runtime_client.status()
 
         self._run_action("wait_restart", wait)
         self.overview.set_restart_waiting(True)
@@ -643,14 +657,14 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
             ).pack(side="right", padx=4)
 
     def _open_web_gui(self) -> None:
-        self.controller.open_web_gui()
+        self.runtime_client.open_web_gui()
 
     @staticmethod
     def _open_link(target: str) -> None:
         webbrowser.open(target)
 
     def _copy_address(self) -> None:
-        self._copy_text(self.current_status.url or self.controller.url)
+        self._copy_text(self.current_status.url or self.runtime_client.url)
 
     def _copy_text(self, value: str) -> None:
         self.clipboard_clear()
@@ -829,7 +843,7 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
 
     def _stop_and_close(self) -> None:
         self.closing = True
-        self._run_action("stop_close", self.controller.stop)
+        self._run_action("stop_close", self.runtime_client.stop)
 
     def _cancel_close(self) -> None:
         self.closing = False
@@ -843,9 +857,9 @@ class LauncherApplication(ctk.CTk):  # type: ignore[misc]
         self.restart_cancel.set()
         with contextlib.suppress(Exception):
             if self.restart_waiting:
-                self.controller.set_agent_drain(False)
+                self.runtime_client.set_agent_drain(False)
         with contextlib.suppress(Exception):
-            self.monitor.stop()
+            self.runtime_client.stop_monitoring()
         with contextlib.suppress(Exception):
             self.log_worker.stop()
         with contextlib.suppress(Exception):

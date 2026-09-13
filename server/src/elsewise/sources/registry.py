@@ -1,6 +1,8 @@
 from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 
+from elsewise.sources.contracts import SourceCategory, SourceRole
+
 Finalize = Callable[[str, float], Awaitable[str]]
 
 
@@ -8,9 +10,18 @@ Finalize = Callable[[str, float], Awaitable[str]]
 class SourceDriver:
     id: str
     version: str
+    category: SourceCategory
+    source_kinds: frozenset[str]
+    supported_roles: frozenset[SourceRole]
     capabilities: frozenset[str]
     required_capabilities: frozenset[str] = frozenset()
     finalize: Finalize | None = None
+
+    def __post_init__(self) -> None:
+        if not self.source_kinds:
+            raise ValueError("Source driver must support at least one source kind")
+        if self.category is not SourceCategory.SEMANTIC and not self.supported_roles:
+            raise ValueError("Capture source driver must support at least one source role")
 
 
 class SourceDriverRegistry:
@@ -40,6 +51,8 @@ class SourceDriverRegistry:
 
 def default_source_registry() -> SourceDriverRegistry:
     from elsewise.sources.drivers.browser_captions import DRIVER as browser_captions
+    from elsewise.sources.drivers.native_audio import DRIVER as native_audio
     from elsewise.sources.drivers.synthetic import DRIVER as synthetic
+    from elsewise.sources.drivers.synthetic_audio import DRIVER as synthetic_audio
 
-    return SourceDriverRegistry((browser_captions, synthetic))
+    return SourceDriverRegistry((browser_captions, synthetic, native_audio, synthetic_audio))

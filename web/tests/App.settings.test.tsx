@@ -85,7 +85,7 @@ describe("App settings", () => {
     const saveButtons = within(settingsDrawer).getAllByRole("button", {
       name: "Save",
     });
-    expect(saveButtons).toHaveLength(5);
+    expect(saveButtons).toHaveLength(6);
     for (const saveButton of saveButtons) {
       expect(saveButton).toHaveClass("settings-save-button");
       expect(saveButton.querySelector("svg")).not.toBeNull();
@@ -654,7 +654,7 @@ describe("App settings", () => {
       document.querySelectorAll(
         '[data-lock-reason="Locked after first start"]',
       ),
-    ).toHaveLength(5);
+    ).toHaveLength(7);
 
     fireEvent.change(screen.getByLabelText("Title"), {
       target: { value: "Renamed after stop" },

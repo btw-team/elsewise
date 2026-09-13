@@ -46,26 +46,25 @@ class SessionController:
             if current.recording_status == "running":
                 return current
             self.sessions.start(session_id)
-            epoch = self.sources.attach_for_session(session_id)
-            if epoch is not None:
+            for epoch in self.sources.attach_for_session(session_id):
                 self._dispatch_source_start(epoch.id)
             return self.sessions.get(session_id)
 
         return await self.transitions.run(operation)
 
-    async def select_source(self, session_id: str, source_id: str) -> SessionRecord:
+    async def select_source(self, session_id: str, source_id: str, *, role: str) -> SessionRecord:
         async def operation() -> SessionRecord:
             current = self.sessions.get(session_id)
             if current.recording_status != "running":
                 raise ServiceError(
                     "session_not_running", "The session is not running.", status_code=409
                 )
-            if current.selected_source_id == source_id:
+            current_epoch = self.sources.selected_epoch(session_id, role=role)
+            if current_epoch is not None and current_epoch.source_id == source_id:
                 return current
-            current_epoch = self.sources.selected_epoch(session_id)
             if current_epoch is not None:
                 await self.sources.finalize_epoch(current_epoch.id, reason="source_switched")
-            epoch = self.sources.select(session_id, source_id)
+            epoch = self.sources.select(session_id, source_id, role=role)
             await self.sources.start_epoch(epoch.id)
             return self.sessions.get(session_id)
 

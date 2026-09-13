@@ -32,8 +32,13 @@ export interface SessionSummary {
   agent_reasoning_effort: string | null;
   recording_status: "starting" | "running" | "stopping" | "stopped";
   source_status: string;
+  self_audio_enabled: boolean;
+  remote_audio_enabled: boolean;
+  secondary_fallback_enabled: boolean;
+  requested_speech_profile: "auto" | "conservative" | "standard" | "best";
+  remote_target_key: string | null;
   agent_status: string;
-  selected_source_id: string | null;
+  source_bindings: SessionSourceBinding[];
   allow_workspace_write: boolean;
   allow_network: boolean;
   requested_agent_cwd: string | null;
@@ -55,15 +60,22 @@ export interface Utterance {
   utterance_id: string;
   revision: number;
   speaker: string | null;
-  speaker_role: "self" | "other" | "unknown";
+  speaker_role: "self" | "remote" | "unknown";
   text: string;
   final: boolean;
   first_session_offset_us: number;
   last_session_offset_us: number;
   first_received_at: string;
   last_received_at: string;
-  first_client_seq: number;
-  last_client_seq: number;
+  first_client_seq: number | null;
+  last_client_seq: number | null;
+  first_audio_sample_position: number | null;
+  last_audio_sample_position: number | null;
+  finalization_state: "partial" | "live_final" | "durable_final";
+  asr_backend: string | null;
+  asr_model_id: string | null;
+  asr_model_version: string | null;
+  transcript_confidence: number | null;
 }
 
 export interface Segment {
@@ -77,12 +89,15 @@ export interface Segment {
 
 export interface CaptureSource {
   id: string;
-  paired_client_id: string;
+  paired_client_id: string | null;
   source_kind: string;
+  source_category: "audio" | "captions" | "semantic" | "synthetic";
+  source_role: "self" | "remote" | "secondary";
+  target_key: string | null;
   platform: string;
   driver_id: string;
   driver_version: string;
-  tab_instance_id: string;
+  tab_instance_id: string | null;
   capabilities: string[];
   available: boolean;
   connected: boolean;
@@ -92,6 +107,22 @@ export interface CaptureSource {
   client_display_name?: string | null;
   browser_family?: string | null;
   tab_ordinal?: number | null;
+}
+
+export interface SessionSourceBinding {
+  id: string;
+  session_id: string;
+  segment_id: string | null;
+  role: "self" | "remote" | "secondary";
+  source_id: string | null;
+  requested_mode: "auto" | "explicit" | "disabled";
+  effective_mode:
+    "native" | "captions" | "synthetic" | "unavailable" | "disabled";
+  fallback_priority: number;
+  state: string;
+  reason: string | null;
+  activated_at: string | null;
+  stopped_at: string | null;
 }
 
 export interface GlobalSnapshot {
@@ -224,6 +255,11 @@ export interface GlobalSettings {
   free_prompt_hard_character_cap: number;
   default_allow_workspace_write: boolean;
   default_allow_network: boolean;
+  default_self_audio_enabled: boolean;
+  default_remote_audio_enabled: boolean;
+  default_secondary_fallback_enabled: boolean;
+  default_speech_profile: "auto" | "conservative" | "standard" | "best";
+  default_remote_target_key: string;
   recovery?: {
     file_name: string;
     source: "backup" | "defaults";

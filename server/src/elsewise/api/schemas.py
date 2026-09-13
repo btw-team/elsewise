@@ -20,6 +20,24 @@ class SessionCreate(BaseModel):
     create_agent_cwd: bool = False
     allow_workspace_write: bool | None = None
     allow_network: bool | None = None
+    self_audio_enabled: bool | None = None
+    remote_audio_enabled: bool | None = None
+    secondary_fallback_enabled: bool | None = None
+    requested_speech_profile: Literal["auto", "conservative", "standard", "best"] | None = None
+    remote_target_key: str | None = Field(default=None, max_length=256)
+
+    @model_validator(mode="after")
+    def at_least_one_source_lane(self) -> "SessionCreate":
+        if all(
+            value is False
+            for value in (
+                self.self_audio_enabled,
+                self.remote_audio_enabled,
+                self.secondary_fallback_enabled,
+            )
+        ):
+            raise ValueError("at least one source lane must be enabled")
+        return self
 
 
 class SessionUpdate(BaseModel):
@@ -37,6 +55,11 @@ class SessionUpdate(BaseModel):
     create_agent_cwd: bool = False
     allow_workspace_write: bool | None = None
     allow_network: bool | None = None
+    self_audio_enabled: bool | None = None
+    remote_audio_enabled: bool | None = None
+    secondary_fallback_enabled: bool | None = None
+    requested_speech_profile: Literal["auto", "conservative", "standard", "best"] | None = None
+    remote_target_key: str | None = Field(default=None, max_length=256)
 
 
 class AgentActionCreate(BaseModel):
@@ -118,6 +141,11 @@ class GlobalSettingsUpdate(BaseModel):
     zoom_own_name: str | None = Field(default=None, max_length=512)
     default_allow_workspace_write: bool | None = None
     default_allow_network: bool | None = None
+    default_self_audio_enabled: bool | None = None
+    default_remote_audio_enabled: bool | None = None
+    default_secondary_fallback_enabled: bool | None = None
+    default_speech_profile: Literal["auto", "conservative", "standard", "best"] | None = None
+    default_remote_target_key: str | None = Field(default=None, max_length=256)
 
 
 class PairedClientRename(BaseModel):
@@ -130,3 +158,13 @@ class SourceSelection(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source_id: str = Field(min_length=36, max_length=36)
+
+
+class SpeechProfileResolveRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    requested: Literal["auto", "conservative", "standard", "best"] = "auto"
+    language: str = Field(min_length=2, max_length=35)
+    ram_mb: int | None = Field(default=None, ge=128, le=1_048_576)
+    vram_mb: int = Field(default=0, ge=0, le=1_048_576)
+    providers: frozenset[str] = Field(default_factory=lambda: frozenset({"cpu"}), max_length=16)

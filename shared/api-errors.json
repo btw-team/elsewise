@@ -330,6 +330,54 @@
     "description": "The source omitted capabilities required by its registered driver."
   },
   {
+    "code": "invalid_settings",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The combined global settings are invalid."
+  },
+  {
+    "code": "invalid_source_configuration",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "A session must keep at least one capture lane enabled."
+  },
+  {
+    "code": "invalid_source_id",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The native source identifier is malformed."
+  },
+  {
+    "code": "invalid_source_role",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The requested source role is unknown."
+  },
+  {
+    "code": "invalid_source_target",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The native source target is malformed."
+  },
+  {
+    "code": "source_driver_mismatch",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The source descriptor does not match its registered driver."
+  },
+  {
+    "code": "source_role_disabled",
+    "http_status": 409,
+    "translation_key": "sessionRunningError",
+    "description": "The requested source lane is disabled for this session."
+  },
+  {
+    "code": "source_role_mismatch",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The selected source cannot fill the requested lane."
+  },
+  {
     "code": "source_unavailable",
     "http_status": 409,
     "translation_key": "sessionRunningError",

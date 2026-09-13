@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from time import monotonic_ns
@@ -14,6 +15,7 @@ from elsewise.persistence.models import (
     AgentThreadRecord,
     RecordingSegmentRecord,
     SessionRecord,
+    SessionSourceBindingRecord,
     SourceEpochRecord,
     UtteranceRecord,
     utc_now,
@@ -21,8 +23,49 @@ from elsewise.persistence.models import (
 from elsewise.services.errors import ServiceError
 from elsewise.services.outbox import emit_ui_event
 
+ACTIVE_BINDING_STATES = (
+    "starting",
+    "active",
+    "waiting",
+    "degraded",
+    "stopping",
+    "disabled_by_user",
+)
 
-def session_payload(record: SessionRecord) -> dict[str, Any]:
+
+def active_source_bindings(db: Session, session_id: str) -> list[SessionSourceBindingRecord]:
+    return list(
+        db.scalars(
+            select(SessionSourceBindingRecord)
+            .where(
+                SessionSourceBindingRecord.session_id == session_id,
+                SessionSourceBindingRecord.state.in_(ACTIVE_BINDING_STATES),
+            )
+            .order_by(SessionSourceBindingRecord.role)
+        )
+    )
+
+
+def source_binding_payload(record: SessionSourceBindingRecord) -> dict[str, Any]:
+    return {
+        "id": record.id,
+        "session_id": record.session_id,
+        "segment_id": record.segment_id,
+        "role": record.role,
+        "source_id": record.source_id,
+        "requested_mode": record.requested_mode,
+        "effective_mode": record.effective_mode,
+        "fallback_priority": record.fallback_priority,
+        "state": record.state,
+        "reason": record.reason,
+        "activated_at": record.activated_at.isoformat() if record.activated_at else None,
+        "stopped_at": record.stopped_at.isoformat() if record.stopped_at else None,
+    }
+
+
+def session_payload(
+    record: SessionRecord, bindings: Iterable[SessionSourceBindingRecord] = ()
+) -> dict[str, Any]:
     return {
         "id": record.id,
         "title": record.title,
@@ -35,8 +78,13 @@ def session_payload(record: SessionRecord) -> dict[str, Any]:
         "agent_reasoning_effort": record.agent_reasoning_effort,
         "recording_status": record.recording_status,
         "source_status": record.source_status,
+        "self_audio_enabled": record.self_audio_enabled,
+        "remote_audio_enabled": record.remote_audio_enabled,
+        "secondary_fallback_enabled": record.secondary_fallback_enabled,
+        "requested_speech_profile": record.requested_speech_profile,
+        "remote_target_key": record.remote_target_key,
         "agent_status": record.agent_status,
-        "selected_source_id": record.selected_source_id,
+        "source_bindings": [source_binding_payload(binding) for binding in bindings],
         "allow_workspace_write": record.allow_workspace_write,
         "allow_network": record.allow_network,
         "requested_agent_cwd": record.requested_agent_cwd,
@@ -102,7 +150,18 @@ class SessionService:
         requested_agent_cwd: str | None = None,
         allow_workspace_write: bool = False,
         allow_network: bool = False,
+        self_audio_enabled: bool = True,
+        remote_audio_enabled: bool = True,
+        secondary_fallback_enabled: bool = True,
+        requested_speech_profile: str = "auto",
+        remote_target_key: str | None = None,
     ) -> SessionRecord:
+        if not (self_audio_enabled or remote_audio_enabled or secondary_fallback_enabled):
+            raise ServiceError(
+                "invalid_source_configuration",
+                "At least one source lane must be enabled.",
+                status_code=422,
+            )
         with self.database.transaction() as db:
             resolved_action_preset_id = self._resolve_action_preset_id(db, action_preset_id)
             record = SessionRecord(
@@ -117,10 +176,20 @@ class SessionService:
                 requested_agent_cwd=requested_agent_cwd,
                 allow_workspace_write=allow_workspace_write,
                 allow_network=allow_network,
+                self_audio_enabled=self_audio_enabled,
+                remote_audio_enabled=remote_audio_enabled,
+                secondary_fallback_enabled=secondary_fallback_enabled,
+                requested_speech_profile=requested_speech_profile,
+                remote_target_key=remote_target_key,
             )
             db.add(record)
             db.flush()
-            emit_ui_event(db, "session.state", record.id, session_payload(record))
+            emit_ui_event(
+                db,
+                "session.state",
+                record.id,
+                session_payload(record, active_source_bindings(db, record.id)),
+            )
             log_event("session.created", session_id=record.id, state=record.recording_status)
             return record
 
@@ -131,6 +200,20 @@ class SessionService:
     def get(self, session_id: str) -> SessionRecord:
         with self.database.transaction() as db:
             return self._get(db, session_id)
+
+    def payload(self, session_id: str) -> dict[str, Any]:
+        with self.database.transaction() as db:
+            record = self._get(db, session_id)
+            return session_payload(record, active_source_bindings(db, session_id))
+
+    def list_payloads(self) -> list[dict[str, Any]]:
+        with self.database.transaction() as db:
+            records = list(
+                db.scalars(select(SessionRecord).order_by(SessionRecord.created_at.desc()))
+            )
+            return [
+                session_payload(record, active_source_bindings(db, record.id)) for record in records
+            ]
 
     def update(
         self,
@@ -186,6 +269,20 @@ class SessionService:
                 normalized_changes["action_preset_id"] = self._resolve_action_preset_id(
                     db, normalized_changes["action_preset_id"]
                 )
+            lane_values = {
+                key: bool(normalized_changes.get(key, getattr(record, key)))
+                for key in (
+                    "self_audio_enabled",
+                    "remote_audio_enabled",
+                    "secondary_fallback_enabled",
+                )
+            }
+            if not any(lane_values.values()):
+                raise ServiceError(
+                    "invalid_source_configuration",
+                    "At least one source lane must be enabled.",
+                    status_code=422,
+                )
             permission_keys = {"allow_workspace_write", "allow_network"}
             if permission_keys.intersection(normalized_changes):
                 changed = {
@@ -205,7 +302,12 @@ class SessionService:
                 setattr(record, key, value)
             record.version += 1
             db.flush()
-            emit_ui_event(db, "session.state", record.id, session_payload(record))
+            emit_ui_event(
+                db,
+                "session.state",
+                record.id,
+                session_payload(record, active_source_bindings(db, record.id)),
+            )
             return record
 
     @staticmethod
@@ -261,7 +363,6 @@ class SessionService:
                     record.stop_requested_at = None
                     record.stop_boundary_offset_us = None
                     record.monotonic_origin_ns = monotonic_ns()
-                    record.selected_source_id = None
                     record.source_status = "waiting_for_source"
                     record.version += 1
                     segment = RecordingSegmentRecord(
@@ -272,7 +373,12 @@ class SessionService:
                     db.add(segment)
                     db.flush()
                     record.recording_status = "running"
-                    emit_ui_event(db, "session.state", record.id, session_payload(record))
+                    emit_ui_event(
+                        db,
+                        "session.state",
+                        record.id,
+                        session_payload(record, active_source_bindings(db, record.id)),
+                    )
                     log_event("session.started", session_id=record.id, state="running")
                     return record
             except IntegrityError as exc:
@@ -302,7 +408,12 @@ class SessionService:
                 (monotonic_ns() - (record.monotonic_origin_ns or monotonic_ns())) // 1_000,
             )
             record.version += 1
-            emit_ui_event(db, "session.state", record.id, session_payload(record))
+            emit_ui_event(
+                db,
+                "session.state",
+                record.id,
+                session_payload(record, active_source_bindings(db, record.id)),
+            )
             return record
 
     def finish_stop(
@@ -337,7 +448,6 @@ class SessionService:
             segment.stop_reason = reason
             record.recording_status = "stopped"
             record.stopped_at = stopped_at
-            record.selected_source_id = None
             record.source_status = "no_source"
             record.version += 1
             for epoch in db.scalars(
@@ -349,6 +459,24 @@ class SessionService:
                 epoch.state = "stopped"
                 epoch.ended_at = stopped_at
                 epoch.end_reason = epoch.end_reason or "forced_stop"
+            for binding in db.scalars(
+                select(SessionSourceBindingRecord).where(
+                    SessionSourceBindingRecord.session_id == session_id,
+                    SessionSourceBindingRecord.state.in_(
+                        (
+                            "starting",
+                            "active",
+                            "waiting",
+                            "degraded",
+                            "stopping",
+                            "disabled_by_user",
+                        )
+                    ),
+                )
+            ):
+                binding.state = "stopped"
+                binding.stopped_at = stopped_at
+                binding.reason = binding.reason or reason
             for utterance in db.scalars(
                 select(UtteranceRecord).where(
                     UtteranceRecord.session_id == session_id,
@@ -356,7 +484,13 @@ class SessionService:
                 )
             ):
                 utterance.final = True
-            emit_ui_event(db, "session.state", record.id, session_payload(record))
+                utterance.finalization_state = "durable_final"
+            emit_ui_event(
+                db,
+                "session.state",
+                record.id,
+                session_payload(record, active_source_bindings(db, record.id)),
+            )
             log_event("session.stopped", session_id=record.id, state="stopped", reason=reason)
             return record
 
@@ -426,8 +560,25 @@ def recover_after_restart(database: Database) -> None:
             record.recording_status = "stopped"
             record.source_status = "no_source"
             record.stopped_at = recovered_at
-            record.selected_source_id = None
             record.version += 1
+            for binding in db.scalars(
+                select(SessionSourceBindingRecord).where(
+                    SessionSourceBindingRecord.session_id == record.id,
+                    SessionSourceBindingRecord.state.in_(
+                        (
+                            "starting",
+                            "active",
+                            "waiting",
+                            "degraded",
+                            "stopping",
+                            "disabled_by_user",
+                        )
+                    ),
+                )
+            ):
+                binding.state = "stopped"
+                binding.stopped_at = recovered_at
+                binding.reason = "daemon_restarted"
             open_segments = db.scalars(
                 select(RecordingSegmentRecord).where(
                     RecordingSegmentRecord.session_id == record.id,
@@ -452,7 +603,12 @@ def recover_after_restart(database: Database) -> None:
                     UtteranceRecord.final.is_(False),
                 )
             )
-            emit_ui_event(db, "session.state", record.id, session_payload(record))
+            emit_ui_event(
+                db,
+                "session.state",
+                record.id,
+                session_payload(record, active_source_bindings(db, record.id)),
+            )
             log_event("session.recovered", session_id=record.id, state="stopped")
 
         from elsewise.persistence.models import AgentRunRecord

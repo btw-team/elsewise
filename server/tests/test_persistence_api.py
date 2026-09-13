@@ -23,6 +23,7 @@ from elsewise.persistence.models import (
     PairedClientRecord,
     RecordingSegmentRecord,
     SessionRecord,
+    SessionSourceBindingRecord,
     SourceEpochRecord,
     UiEventRecord,
     UtteranceRecord,
@@ -152,8 +153,28 @@ def bind_source(database: Database, session_id: str) -> tuple[str, str]:
         )
         db.add(source)
         db.flush()
+        binding = db.scalar(
+            select(SessionSourceBindingRecord).where(
+                SessionSourceBindingRecord.session_id == session.id,
+                SessionSourceBindingRecord.role == "secondary",
+                SessionSourceBindingRecord.state == "waiting",
+            )
+        )
+        if binding is None:
+            binding = SessionSourceBindingRecord(
+                session_id=session.id,
+                segment_id=segment.id,
+                role="secondary",
+            )
+            db.add(binding)
+        binding.source_id = source.id
+        binding.requested_mode = "explicit"
+        binding.effective_mode = "captions"
+        binding.state = "active"
+        db.flush()
         epoch = SourceEpochRecord(
             source_id=source.id,
+            binding_id=binding.id,
             session_id=session.id,
             segment_id=segment.id,
             producer_epoch_id="producer-1",
@@ -161,7 +182,6 @@ def bind_source(database: Database, session_id: str) -> tuple[str, str]:
         )
         db.add(epoch)
         db.flush()
-        session.selected_source_id = source.id
         session.source_status = "capturing"
         return source.id, epoch.id
 
@@ -585,6 +605,58 @@ def test_french_prompts_and_global_permission_defaults_seed_new_sessions(
         ).json()
         assert overridden["allow_workspace_write"] is False
         assert overridden["allow_network"] is False
+
+
+@pytest.mark.integration
+def test_audio_defaults_seed_sessions_and_never_allow_every_lane_off(tmp_path: Path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{tmp_path / 'audio-defaults.sqlite3'}",
+        settings_path=tmp_path / "settings.json",
+        agent_provider=FakeAgentProvider(),
+    )
+    with TestClient(app, base_url="http://127.0.0.1:38473") as client:
+        configured = client.patch(
+            "/api/settings",
+            json={
+                "default_self_audio_enabled": False,
+                "default_remote_audio_enabled": True,
+                "default_secondary_fallback_enabled": False,
+                "default_speech_profile": "conservative",
+                "default_remote_target_key": "process:meeting-app",
+            },
+        )
+        assert configured.status_code == 200
+
+        inherited = client.post("/api/sessions", json={"title": "Audio defaults"})
+        assert inherited.status_code == 201
+        payload = inherited.json()
+        assert payload["self_audio_enabled"] is False
+        assert payload["remote_audio_enabled"] is True
+        assert payload["secondary_fallback_enabled"] is False
+        assert payload["requested_speech_profile"] == "conservative"
+        assert payload["remote_target_key"] == "process:meeting-app"
+
+        invalid_settings = client.patch(
+            "/api/settings",
+            json={
+                "default_self_audio_enabled": False,
+                "default_remote_audio_enabled": False,
+            },
+        )
+        assert invalid_settings.status_code == 422
+        assert invalid_settings.json()["error"]["code"] == "invalid_settings"
+        assert client.get("/api/settings").json()["default_remote_audio_enabled"] is True
+
+        invalid_session = client.post(
+            "/api/sessions",
+            json={
+                "title": "No inputs",
+                "self_audio_enabled": False,
+                "remote_audio_enabled": False,
+                "secondary_fallback_enabled": False,
+            },
+        )
+        assert invalid_session.status_code == 422
 
 
 @pytest.mark.integration
@@ -1058,7 +1130,6 @@ def test_long_session_snapshot_is_bounded_and_history_is_cursor_paginated(
                     source_epoch_id=epoch_id,
                     utterance_id=f"long-{index}",
                     revision=1,
-                    speaker="Speaker",
                     text=f"bounded secret transcript {index}",
                     final=True,
                     origin_kind="browser_captions",

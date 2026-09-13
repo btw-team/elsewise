@@ -1,6 +1,5 @@
 from typing import Final
 
-PROTOCOL_VERSION: Final = 1
 MAX_INGEST_MESSAGE_BYTES: Final = 64 * 1024
 MAX_CAPTION_TEXT_LENGTH: Final = 20_000
 MAX_SPEAKER_LENGTH: Final = 512

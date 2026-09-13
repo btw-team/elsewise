@@ -1,6 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from elsewise.domain.states import AgentStatus, RecordingStatus, SourceStatus
+from elsewise.sources.contracts import SourceRole
 
 
 class TransitionRejected(ValueError):
@@ -18,7 +19,7 @@ class SessionMachine:
     recording_status: RecordingStatus = RecordingStatus.STOPPED
     source_status: SourceStatus = SourceStatus.NO_SOURCE
     agent_status: AgentStatus = AgentStatus.NOT_STARTED
-    selected_source_id: str | None = None
+    selected_sources: dict[SourceRole, str] = field(default_factory=dict)
     segment_sequence: int = 0
     initial_turn_enqueued: bool = False
     stop_boundary_offset_us: int | None = None
@@ -30,7 +31,7 @@ class SessionMachine:
             return StartResult(self.segment_sequence, False)
         self.recording_status = RecordingStatus.STARTING
         self.segment_sequence += 1
-        self.selected_source_id = None
+        self.selected_sources.clear()
         self.source_status = SourceStatus.WAITING_FOR_SOURCE
         self.stop_boundary_offset_us = None
         enqueue = not self.initial_turn_enqueued
@@ -40,16 +41,22 @@ class SessionMachine:
         self.recording_status = RecordingStatus.RUNNING
         return StartResult(self.segment_sequence, enqueue)
 
-    def select_source(self, source_id: str, *, captions_visible: bool = False) -> None:
+    def select_source(
+        self,
+        source_id: str,
+        *,
+        role: SourceRole = SourceRole.SECONDARY,
+        captions_visible: bool = False,
+    ) -> None:
         if self.recording_status is not RecordingStatus.RUNNING:
             raise TransitionRejected("session_not_running")
-        self.selected_source_id = source_id
+        self.selected_sources[role] = source_id
         self.source_status = (
             SourceStatus.CAPTURING if captions_visible else SourceStatus.CAPTIONS_NOT_DETECTED
         )
 
     def lose_source(self, source_id: str) -> None:
-        if self.selected_source_id == source_id:
+        if source_id in self.selected_sources.values():
             self.source_status = SourceStatus.WAITING_FOR_SOURCE
 
     def begin_stop(self, *, boundary_offset_us: int) -> None:
@@ -66,5 +73,5 @@ class SessionMachine:
         if self.recording_status is not RecordingStatus.STOPPING:
             raise TransitionRejected("session_not_stopping")
         self.recording_status = RecordingStatus.STOPPED
-        self.selected_source_id = None
+        self.selected_sources.clear()
         self.source_status = SourceStatus.NO_SOURCE

@@ -15,7 +15,7 @@ const fixtures = `${resolve(process.cwd(), "../tests/fixtures/zoom")}/`;
 const flush = () =>
   new Promise((resolvePromise) => setTimeout(resolvePromise, 0));
 const settle = () =>
-  new Promise((resolvePromise) => setTimeout(resolvePromise, 200));
+  new Promise((resolvePromise) => setTimeout(resolvePromise, 300));
 
 function fixture(name: string): string {
   return readFileSync(`${fixtures}${name}`, "utf8");

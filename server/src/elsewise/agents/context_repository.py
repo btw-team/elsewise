@@ -6,11 +6,9 @@ from sqlalchemy.orm import Session
 from elsewise.agents.prompts import ContextStrategy, format_utterance
 from elsewise.persistence.models import (
     AgentThreadRecord,
-    CaptureSourceRecord,
-    SourceEpochRecord,
     UtteranceRecord,
+    UtteranceSpeakerAssignmentRecord,
 )
-from elsewise.services.speaker_identity import classify_speaker, own_speaker_names
 from elsewise.settings.config import GlobalSettings
 
 CONTEXT_QUERY_CHUNK = 200
@@ -20,13 +18,14 @@ CONTEXT_QUERY_CHUNK = 200
 class ContextSelection:
     utterances: list[UtteranceRecord]
     speaker_roles: dict[str, str]
+    speaker_labels: dict[str, str | None]
     truncated: bool = False
 
 
 class AgentContextRepository:
     def __init__(self, db: Session, settings: GlobalSettings) -> None:
         self.db = db
-        self.configured_names = own_speaker_names(settings)
+        self.settings = settings
 
     def select(
         self,
@@ -73,6 +72,7 @@ class AgentContextRepository:
         )
         selected_desc: list[UtteranceRecord] = []
         roles: dict[str, str] = {}
+        labels: dict[str, str | None] = {}
         rendered_size = 0
         offset = 0
         while True:
@@ -87,32 +87,29 @@ class AgentContextRepository:
             chunk = list(self.db.scalars(descending.offset(offset).limit(chunk_size)))
             if not chunk:
                 break
-            epoch_ids = {utterance.source_epoch_id for utterance in chunk}
-            platforms: dict[str, str] = {
-                epoch_id: platform
-                for epoch_id, platform in self.db.execute(
-                    select(SourceEpochRecord.id, CaptureSourceRecord.platform)
-                    .join(
-                        CaptureSourceRecord, CaptureSourceRecord.id == SourceEpochRecord.source_id
+            assignment_by_utterance = {
+                assignment.utterance_id: assignment
+                for assignment in self.db.scalars(
+                    select(UtteranceSpeakerAssignmentRecord).where(
+                        UtteranceSpeakerAssignmentRecord.utterance_id.in_(
+                            {utterance.id for utterance in chunk}
+                        )
                     )
-                    .where(SourceEpochRecord.id.in_(epoch_ids))
-                ).all()
+                )
             }
             for utterance in chunk:
-                role = classify_speaker(
-                    utterance.speaker,
-                    platforms.get(utterance.source_epoch_id),
-                    self.configured_names,
-                )
+                assignment = assignment_by_utterance.get(utterance.id)
+                role = assignment.speaker_role if assignment is not None else "unknown"
                 roles[utterance.id] = role
+                labels[utterance.id] = assignment.display_label if assignment else None
                 selected_desc.append(utterance)
-                rendered_size += len(format_utterance(utterance, role)) + 1
+                rendered_size += len(format_utterance(utterance, role, labels[utterance.id])) + 1
                 if rendered_size > hard_character_cap:
                     selected_desc.reverse()
-                    return ContextSelection(selected_desc, roles, truncated=True)
+                    return ContextSelection(selected_desc, roles, labels, truncated=True)
             offset += len(chunk)
             if len(chunk) < chunk_size:
                 break
         selected_desc.reverse()
         strategy_truncated = strategy == "last_utterances" and len(selected_desc) == hard_limit
-        return ContextSelection(selected_desc, roles, truncated=strategy_truncated)
+        return ContextSelection(selected_desc, roles, labels, truncated=strategy_truncated)

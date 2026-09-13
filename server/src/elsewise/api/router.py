@@ -12,6 +12,7 @@ from fastapi import (
     WebSocket,
     WebSocketDisconnect,
 )
+from pydantic import ValidationError
 from sqlalchemy import and_, func, or_, select
 
 from elsewise import __version__
@@ -36,6 +37,7 @@ from elsewise.api.schemas import (
     SessionCreate,
     SessionUpdate,
     SourceSelection,
+    SpeechProfileResolveRequest,
 )
 from elsewise.api.security import safe_http_request, safe_ui_websocket
 from elsewise.api.serialization import (
@@ -44,6 +46,7 @@ from elsewise.api.serialization import (
     ui_event_payload,
     utterance_payload,
 )
+from elsewise.audio.runtime import AudioRuntime
 from elsewise.exports import ExportService
 from elsewise.observability import RuntimeDiagnostics
 from elsewise.persistence.database import Database
@@ -58,9 +61,10 @@ from elsewise.persistence.models import (
     PairedClientRecord,
     RecordingSegmentRecord,
     SessionRecord,
-    SourceEpochRecord,
+    SessionSourceBindingRecord,
     UiEventRecord,
     UtteranceRecord,
+    UtteranceSpeakerAssignmentRecord,
 )
 from elsewise.services.action_presets import ActionPresetService
 from elsewise.services.buttons import ButtonService, button_payload
@@ -70,10 +74,12 @@ from elsewise.services.pairing import PairingService
 from elsewise.services.runtime_status import RuntimeStatusService
 from elsewise.services.session_controller import SessionController
 from elsewise.services.sessions import SessionService, prepare_agent_cwd, session_payload
-from elsewise.services.speaker_identity import classify_speaker, own_speaker_names
-from elsewise.settings.config import DEFAULT_INITIAL_PROMPTS, SettingsStore
+from elsewise.settings.config import DEFAULT_INITIAL_PROMPTS, GlobalSettings, SettingsStore
 from elsewise.settings.languages import SUPPORTED_LANGUAGE_SET
 from elsewise.settings.limits import UI_SEND_TIMEOUT_SECONDS
+from elsewise.speakers.service import refresh_caption_speaker_assignments
+from elsewise.speech.models import ModelRegistry
+from elsewise.speech.profiles import HardwareCapabilities, SpeechProfile, resolve_profile
 
 router = APIRouter(prefix="/api")
 
@@ -117,6 +123,48 @@ def health(request: Request) -> dict[str, Any]:
 async def runtime_status(request: Request) -> dict[str, Any]:
     service = cast(RuntimeStatusService, request.app.state.runtime_status)
     return await service.snapshot()
+
+
+@router.get("/audio/capabilities")
+async def audio_capabilities(request: Request, refresh: bool = False) -> dict[str, Any]:
+    runtime = cast(AudioRuntime, request.app.state.audio_runtime)
+    return await runtime.snapshot(refresh=refresh)
+
+
+@router.get("/speech/models")
+def speech_models(request: Request) -> dict[str, Any]:
+    registry = cast(ModelRegistry, request.app.state.model_registry)
+    return {
+        "manifest_version": registry.manifest.version,
+        "items": [item.payload() for item in registry.inventory()],
+    }
+
+
+@router.post("/speech/profiles/resolve")
+def resolve_speech_profile(body: SpeechProfileResolveRequest, request: Request) -> dict[str, Any]:
+    import psutil
+
+    registry = cast(ModelRegistry, request.app.state.model_registry)
+    ram_mb = body.ram_mb or max(128, int(psutil.virtual_memory().available // (1024 * 1024)))
+    resolution = resolve_profile(
+        SpeechProfile(body.requested),
+        language=body.language,
+        installed_artifacts=registry.installed_artifacts(),
+        hardware=HardwareCapabilities(
+            ram_mb=ram_mb,
+            vram_mb=body.vram_mb,
+            providers=body.providers,
+        ),
+    )
+    return {
+        "requested": resolution.requested.value,
+        "effective": resolution.effective.value if resolution.effective else None,
+        "backend": resolution.artifact.backend if resolution.artifact else None,
+        "model_id": resolution.artifact.id if resolution.artifact else None,
+        "model_version": resolution.artifact.version if resolution.artifact else None,
+        "provider": resolution.provider,
+        "reason": resolution.reason,
+    }
 
 
 @router.get("/pairing/requests")
@@ -231,6 +279,25 @@ async def create_session(
         values["allow_workspace_write"] = configured.default_allow_workspace_write
     if values["allow_network"] is None:
         values["allow_network"] = configured.default_allow_network
+    for field, default in (
+        ("self_audio_enabled", configured.default_self_audio_enabled),
+        ("remote_audio_enabled", configured.default_remote_audio_enabled),
+        ("secondary_fallback_enabled", configured.default_secondary_fallback_enabled),
+        ("requested_speech_profile", configured.default_speech_profile),
+    ):
+        if values[field] is None:
+            values[field] = default
+    if values["remote_target_key"] is None and configured.default_remote_target_key:
+        values["remote_target_key"] = configured.default_remote_target_key
+    if not any(
+        values[field]
+        for field in (
+            "self_audio_enabled",
+            "remote_audio_enabled",
+            "secondary_fallback_enabled",
+        )
+    ):
+        raise HTTPException(status_code=422, detail="invalid_source_configuration")
     values["requested_agent_cwd"] = prepare_agent_cwd(
         values["requested_agent_cwd"], create_missing=create_agent_cwd
     )
@@ -240,12 +307,12 @@ async def create_session(
 
 @router.get("/sessions")
 def list_sessions(database: DatabaseDependency) -> list[dict[str, Any]]:
-    return [session_payload(record) for record in SessionService(database).list_all()]
+    return SessionService(database).list_payloads()
 
 
 @router.get("/sessions/{session_id}")
 def get_session(session_id: str, database: DatabaseDependency) -> dict[str, Any]:
-    return session_payload(SessionService(database).get(session_id))
+    return SessionService(database).payload(session_id)
 
 
 @router.patch("/sessions/{session_id}")
@@ -342,6 +409,10 @@ async def update_settings(body: GlobalSettingsUpdate, request: Request) -> dict[
             merged[language] = prompt
         changes["initial_prompts"] = merged
         changes["initial_prompt_version"] = current.initial_prompt_version + 1
+    try:
+        GlobalSettings.model_validate(current.model_copy(update=changes).model_dump())
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail="invalid_settings") from exc
     executable_changes = {
         key: str(changes[key])
         for key in ("codex_executable", "claude_executable")
@@ -360,6 +431,12 @@ async def update_settings(body: GlobalSettingsUpdate, request: Request) -> dict[
             previous = await manager.replace_provider(provider_id, replacement)
             replaced.append((provider_id, previous))
         updated = store.update(changes).model_dump()
+        if {
+            "google_meet_own_name",
+            "microsoft_teams_own_name",
+            "zoom_own_name",
+        }.intersection(changes):
+            refresh_caption_speaker_assignments(database_from_request(request), store.load())
         _emit_settings_changed(request, updated)
         updated["recovery"] = (
             {
@@ -463,7 +540,7 @@ async def start_session(
     await controller.start(session_id)
     # Enqueue is durable and fast; the background worker owns all agent I/O.
     manager.ensure_initial_run(session_id)
-    return session_payload(SessionService(database).get(session_id))
+    return SessionService(database).payload(session_id)
 
 
 @router.post("/sessions/{session_id}/stop")
@@ -471,16 +548,22 @@ async def stop_session(
     session_id: str, request: Request, database: DatabaseDependency
 ) -> dict[str, Any]:
     controller: SessionController = request.app.state.session_controller
-    record = await controller.stop(session_id)
-    return session_payload(record)
+    await controller.stop(session_id)
+    return SessionService(database).payload(session_id)
 
 
-@router.post("/sessions/{session_id}/source")
+@router.post("/sessions/{session_id}/sources/{role}")
 async def select_session_source(
-    session_id: str, body: SourceSelection, request: Request
+    session_id: str,
+    role: str,
+    body: SourceSelection,
+    request: Request,
 ) -> dict[str, Any]:
+    if role not in {"self", "remote", "secondary"}:
+        raise HTTPException(status_code=422, detail="invalid_source_role")
     controller: SessionController = request.app.state.session_controller
-    return session_payload(await controller.select_source(session_id, body.source_id))
+    await controller.select_source(session_id, body.source_id, role=role)
+    return SessionService(database_from_request(request)).payload(session_id)
 
 
 @router.get("/agent/providers")
@@ -652,15 +735,16 @@ def list_utterances(
         statement = select(UtteranceRecord).where(UtteranceRecord.session_id == session_id)
         if boundary is not None:
             before_offset, before_seq, before_id = boundary
+            client_sequence = func.coalesce(UtteranceRecord.first_client_seq, -1)
             statement = statement.where(
                 or_(
                     UtteranceRecord.first_session_offset_us < before_offset,
                     and_(
                         UtteranceRecord.first_session_offset_us == before_offset,
                         or_(
-                            UtteranceRecord.first_client_seq < before_seq,
+                            client_sequence < before_seq,
                             and_(
-                                UtteranceRecord.first_client_seq == before_seq,
+                                client_sequence == before_seq,
                                 UtteranceRecord.id < before_id,
                             ),
                         ),
@@ -671,39 +755,29 @@ def list_utterances(
             db.scalars(
                 statement.order_by(
                     UtteranceRecord.first_session_offset_us.desc(),
-                    UtteranceRecord.first_client_seq.desc(),
+                    func.coalesce(UtteranceRecord.first_client_seq, -1).desc(),
                     UtteranceRecord.id.desc(),
                 ).limit(limit + 1)
             )
         )
         has_more = len(records) > limit
         records = records[:limit]
-        epoch_ids = {record.source_epoch_id for record in records}
-        source_platforms = {
-            epoch_id: platform
-            for epoch_id, platform in db.execute(
-                select(SourceEpochRecord.id, CaptureSourceRecord.platform)
-                .join(CaptureSourceRecord, CaptureSourceRecord.id == SourceEpochRecord.source_id)
-                .where(SourceEpochRecord.id.in_(epoch_ids))
-            ).all()
+        assignments = {
+            assignment.utterance_id: assignment
+            for assignment in db.scalars(
+                select(UtteranceSpeakerAssignmentRecord).where(
+                    UtteranceSpeakerAssignmentRecord.utterance_id.in_(
+                        {record.id for record in records}
+                    )
+                )
+            )
         }
     records.reverse()
-    configured_names = own_speaker_names(cast(SettingsStore, request.app.state.settings).load())
-    items = [
-        utterance_payload(
-            record,
-            speaker_role=classify_speaker(
-                record.speaker,
-                source_platforms.get(record.source_epoch_id),
-                configured_names,
-            ),
-        )
-        for record in records
-    ]
+    items = [utterance_payload(record, assignments.get(record.id)) for record in records]
     next_cursor = (
         utterance_cursor(
             records[0].first_session_offset_us,
-            records[0].first_client_seq,
+            records[0].first_client_seq if records[0].first_client_seq is not None else -1,
             records[0].id,
         )
         if records and has_more
@@ -783,8 +857,10 @@ def list_segments(session_id: str, database: DatabaseDependency) -> list[dict[st
 def session_detail(
     session_id: str, request: Request, database: DatabaseDependency
 ) -> dict[str, Any]:
-    session = SessionService(database).get(session_id)
     with database.transaction() as db:
+        session = db.get(SessionRecord, session_id)
+        if session is None:
+            raise ServiceError("session_not_found", "Session not found.", status_code=404)
         segments = list(
             db.scalars(
                 select(RecordingSegmentRecord)
@@ -792,17 +868,41 @@ def session_detail(
                 .order_by(RecordingSegmentRecord.sequence)
             )
         )
+        bindings = list(
+            db.scalars(
+                select(SessionSourceBindingRecord).where(
+                    SessionSourceBindingRecord.session_id == session_id,
+                    SessionSourceBindingRecord.state.in_(
+                        (
+                            "starting",
+                            "active",
+                            "waiting",
+                            "degraded",
+                            "stopping",
+                            "disabled_by_user",
+                        )
+                    ),
+                )
+            )
+        )
         thread = db.scalar(
             select(AgentThreadRecord).where(AgentThreadRecord.session_id == session_id)
         )
-        state = db.get(MaintenanceStateRecord, 1)
-        pruned_through = state.ui_events_pruned_through if state else 0
-        last_event_id = max(db.scalar(select(func.max(UiEventRecord.id))) or 0, pruned_through)
+        pruned_through, maximum_event_id = db.execute(
+            select(
+                select(MaintenanceStateRecord.ui_events_pruned_through)
+                .where(MaintenanceStateRecord.id == 1)
+                .scalar_subquery(),
+                select(func.max(UiEventRecord.id)).scalar_subquery(),
+            )
+        ).one()
+        pruned_through = int(pruned_through or 0)
+        last_event_id = max(int(maximum_event_id or 0), pruned_through)
 
     utterance_page = list_utterances(session_id, request, database, limit=500, cursor=None)
     history_page = agent_history(session_id, database, limit=50, cursor=None)
     return {
-        "session": session_payload(session),
+        "session": session_payload(session, bindings),
         "segments": [segment_payload(record) for record in segments],
         "agent_thread": (
             {
@@ -836,19 +936,45 @@ def snapshot(request: Request, database: DatabaseDependency) -> dict[str, Any]:
                 .order_by(CaptureSourceRecord.updated_at.desc())
             )
         )
+        bindings = list(
+            db.scalars(
+                select(SessionSourceBindingRecord).where(
+                    SessionSourceBindingRecord.state.in_(
+                        (
+                            "starting",
+                            "active",
+                            "waiting",
+                            "degraded",
+                            "stopping",
+                            "disabled_by_user",
+                        )
+                    )
+                )
+            )
+        )
+        bindings_by_session: dict[str, list[SessionSourceBindingRecord]] = {}
+        for binding in bindings:
+            bindings_by_session.setdefault(binding.session_id, []).append(binding)
         paired_clients_by_id = {
             item.id: item
             for item in db.scalars(
                 select(PairedClientRecord).where(
-                    PairedClientRecord.id.in_({source.paired_client_id for source in sources})
+                    PairedClientRecord.id.in_(
+                        {
+                            source.paired_client_id
+                            for source in sources
+                            if source.paired_client_id is not None
+                        }
+                    )
                 )
             )
         }
         source_ordinals: dict[str, int] = {}
         next_ordinal_by_client: dict[str, int] = {}
         for source in sorted(sources, key=lambda item: (item.created_at, item.id)):
-            ordinal = next_ordinal_by_client.get(source.paired_client_id, 0) + 1
-            next_ordinal_by_client[source.paired_client_id] = ordinal
+            client_key = source.paired_client_id or source.id
+            ordinal = next_ordinal_by_client.get(client_key, 0) + 1
+            next_ordinal_by_client[client_key] = ordinal
             source_ordinals[source.id] = ordinal
         buttons = list(
             db.scalars(select(ButtonDefinitionRecord).order_by(ButtonDefinitionRecord.created_at))
@@ -857,19 +983,21 @@ def snapshot(request: Request, database: DatabaseDependency) -> dict[str, Any]:
         pruned_through = state.ui_events_pruned_through if state else 0
         last_event_id = max(db.scalar(select(func.max(UiEventRecord.id))) or 0, pruned_through)
     return {
-        "sessions": [session_payload(record) for record in sessions],
+        "sessions": [
+            session_payload(record, bindings_by_session.get(record.id, ())) for record in sessions
+        ],
         "sources": [
             source_payload(
                 record,
                 client_display_name=(
                     paired_clients_by_id[record.paired_client_id].display_name
                     if record.paired_client_id in paired_clients_by_id
-                    else "Browser extension"
+                    else None
                 ),
                 browser_family=(
                     paired_clients_by_id[record.paired_client_id].browser_family
                     if record.paired_client_id in paired_clients_by_id
-                    else "browser"
+                    else None
                 ),
                 tab_ordinal=source_ordinals[record.id],
             )

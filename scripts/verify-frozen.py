@@ -41,6 +41,11 @@ def gui_smoke_executable() -> Path:
     return gui_archive_executable()
 
 
+def audio_helper() -> Path:
+    suffix = ".exe" if sys.platform == "win32" else ""
+    return BUNDLE / f"_internal/elsewise/bin/elsewise-audio{suffix}"
+
+
 def isolated_environment(root: Path) -> dict[str, str]:
     environment = os.environ.copy()
     for name, directory in {
@@ -181,6 +186,8 @@ def main() -> None:
         BUNDLE / "_internal/elsewise/web_dist/index.html",
         BUNDLE / "_internal/elsewise/migrations/versions/0001_initial.py",
         BUNDLE / "_internal/elsewise/protocol/schema_files/client.hello.schema.json",
+        BUNDLE / "_internal/elsewise/protocol/audio_files/v1.json",
+        audio_helper(),
         BUNDLE / "_internal/elsewise/assets/elsewise-logo-dark.png",
         BUNDLE / "_internal/elsewise/assets/elsewise-logo-light.png",
         BUNDLE / "_internal/elsewise/assets/theme-tokens.json",
@@ -193,6 +200,17 @@ def main() -> None:
     missing = [str(path) for path in required if not path.is_file()]
     if missing:
         raise RuntimeError(f"Frozen bundle is missing required files: {missing}")
+    helper_descriptor = json.loads(
+        subprocess.run(
+            [audio_helper(), "--describe"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        ).stdout
+    )
+    if helper_descriptor.get("protocol_version") != 1:
+        raise RuntimeError(f"Frozen audio helper protocol mismatch: {helper_descriptor}")
     verify_gui_archive(gui_archive)
     smoke_gui(gui_smoke)
 

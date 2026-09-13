@@ -44,6 +44,11 @@ const emptySettings: GlobalSettings = {
   free_prompt_hard_character_cap: 50_000,
   default_allow_workspace_write: false,
   default_allow_network: false,
+  default_self_audio_enabled: true,
+  default_remote_audio_enabled: true,
+  default_secondary_fallback_enabled: true,
+  default_speech_profile: "auto",
+  default_remote_target_key: "",
 };
 
 function ContextStrategyOptions({ t }: { t: Translator }) {
@@ -270,6 +275,25 @@ export function SettingsDrawer({
       const updated = await api.updateSettings({
         default_allow_workspace_write: settings.default_allow_workspace_write,
         default_allow_network: settings.default_allow_network,
+      });
+      setSettings(updated);
+      onSettingsChanged(updated);
+      onSuccess(t("settingsSaved"));
+    } catch (caught) {
+      onError(apiErrorMessage(caught, t));
+    }
+  }
+
+  async function saveAudioDefaults(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const updated = await api.updateSettings({
+        default_self_audio_enabled: settings.default_self_audio_enabled,
+        default_remote_audio_enabled: settings.default_remote_audio_enabled,
+        default_secondary_fallback_enabled:
+          settings.default_secondary_fallback_enabled,
+        default_speech_profile: settings.default_speech_profile,
+        default_remote_target_key: settings.default_remote_target_key.trim(),
       });
       setSettings(updated);
       onSettingsChanged(updated);
@@ -615,6 +639,89 @@ export function SettingsDrawer({
                   {t("resetToDefaults")}
                 </button>
               </div>
+            </form>
+            <form
+              className="audio-default-settings"
+              onSubmit={(event) => void saveAudioDefaults(event)}
+            >
+              <h3>{t("audioSources")}</h3>
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  checked={settings.default_self_audio_enabled}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      default_self_audio_enabled: event.target.checked,
+                    })
+                  }
+                />
+                {t("microphoneLane")}
+              </label>
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  checked={settings.default_remote_audio_enabled}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      default_remote_audio_enabled: event.target.checked,
+                    })
+                  }
+                />
+                {t("remoteAudioLane")}
+              </label>
+              <label className="inline-check">
+                <input
+                  type="checkbox"
+                  checked={settings.default_secondary_fallback_enabled}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      default_secondary_fallback_enabled: event.target.checked,
+                    })
+                  }
+                />
+                {t("captionsFallback")}
+              </label>
+              <label>
+                {t("speechProfile")}
+                <select
+                  value={settings.default_speech_profile}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      default_speech_profile: event.target
+                        .value as GlobalSettings["default_speech_profile"],
+                    })
+                  }
+                >
+                  {(["auto", "conservative", "standard", "best"] as const).map(
+                    (profile) => (
+                      <option key={profile} value={profile}>
+                        {t(`speechProfile_${profile}`)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label>
+                {t("remoteTarget")}
+                <input
+                  maxLength={256}
+                  value={settings.default_remote_target_key}
+                  onChange={(event) =>
+                    setSettings({
+                      ...settings,
+                      default_remote_target_key: event.target.value,
+                    })
+                  }
+                />
+              </label>
+              <button className="settings-save-button">
+                <FloppyDisk aria-hidden="true" weight="regular" />
+                {t("save")}
+              </button>
             </form>
             <form
               className="codex-permission-settings"

@@ -380,6 +380,7 @@ class AgentQueueManager:
             hard_character_cap=hard_character_cap,
             previous_boundary_id=thread.last_completed_boundary,
             speaker_roles=selection.speaker_roles,
+            speaker_labels=selection.speaker_labels,
         )
         if selection.truncated and not context.truncated:
             context = replace(context, truncated=True)

@@ -191,7 +191,7 @@ async function pollSnapshot(predicate, timeout = 15_000) {
           id: session.id,
           recording_status: session.recording_status,
           source_status: session.source_status,
-          selected_source_id: session.selected_source_id,
+          source_bindings: session.source_bindings,
         })),
         sources: latest.sources,
         utterances: latest.utterances,
@@ -282,7 +282,10 @@ try {
   await pollSnapshot(
     (snapshot) =>
       snapshot.sessions[0]?.recording_status === "running" &&
-      typeof snapshot.sessions[0]?.selected_source_id === "string",
+      snapshot.sessions[0]?.source_bindings?.some(
+        (binding) =>
+          binding.role === "secondary" && typeof binding.source_id === "string",
+      ),
   );
 
   await page.locator("[data-elsewise-captions]").evaluate((root) => {

@@ -32,9 +32,11 @@ from elsewise.persistence.models import (
     CaptureSourceRecord,
     PairedClientRecord,
     RecordingSegmentRecord,
+    SessionSourceBindingRecord,
     SourceEpochRecord,
     UiEventRecord,
     UtteranceRecord,
+    UtteranceSpeakerAssignmentRecord,
 )
 from elsewise.services.errors import ServiceError
 from elsewise.services.sessions import SessionService, recover_after_restart
@@ -42,6 +44,7 @@ from elsewise.services.speaker_identity import classify_speaker
 from elsewise.settings.config import DEFAULT_INITIAL_PROMPTS, SettingsStore
 from elsewise.settings.limits import MAX_AGENT_OUTPUT_CHARACTERS
 from elsewise.settings.paths import AppPaths
+from elsewise.speakers.service import refresh_caption_speaker_assignments
 from sqlalchemy import select
 
 NOW = datetime(2026, 8, 13, 12, 0, tzinfo=UTC)
@@ -350,8 +353,20 @@ async def test_agent_queue_initial_turn_fifo_stream_cancel_and_resume(tmp_path: 
             select(RecordingSegmentRecord).where(RecordingSegmentRecord.session_id == session.id)
         )
         assert segment is not None
+        binding = SessionSourceBindingRecord(
+            session_id=session.id,
+            segment_id=segment.id,
+            role="secondary",
+            source_id=source.id,
+            requested_mode="explicit",
+            effective_mode="captions",
+            state="active",
+        )
+        db.add(binding)
+        db.flush()
         epoch = SourceEpochRecord(
             source_id=source.id,
+            binding_id=binding.id,
             session_id=session.id,
             segment_id=segment.id,
             producer_epoch_id="producer-1",
@@ -360,25 +375,33 @@ async def test_agent_queue_initial_turn_fifo_stream_cancel_and_resume(tmp_path: 
         db.add(epoch)
         db.flush()
         for index in range(2):
+            utterance = UtteranceRecord(
+                session_id=session.id,
+                segment_id=segment.id,
+                source_epoch_id=epoch.id,
+                utterance_id=f"u-{index}",
+                revision=1,
+                text=f"text {index}",
+                final=True,
+                origin_kind="browser_captions",
+                origin_confidence=1.0,
+                projection_version=1,
+                first_session_offset_us=index * 1_000_000,
+                last_session_offset_us=index * 1_000_000,
+                first_received_at=NOW + timedelta(seconds=index),
+                last_received_at=NOW + timedelta(seconds=index),
+                first_client_seq=index + 1,
+                last_client_seq=index + 1,
+            )
+            db.add(utterance)
+            db.flush()
             db.add(
-                UtteranceRecord(
-                    session_id=session.id,
-                    segment_id=segment.id,
-                    source_epoch_id=epoch.id,
-                    utterance_id=f"u-{index}",
-                    revision=1,
-                    speaker="Speaker",
-                    text=f"text {index}",
-                    final=True,
-                    origin_kind="browser_captions",
-                    origin_confidence=1.0,
-                    projection_version=1,
-                    first_session_offset_us=index * 1_000_000,
-                    last_session_offset_us=index * 1_000_000,
-                    first_received_at=NOW + timedelta(seconds=index),
-                    last_received_at=NOW + timedelta(seconds=index),
-                    first_client_seq=index + 1,
-                    last_client_seq=index + 1,
+                UtteranceSpeakerAssignmentRecord(
+                    utterance_id=utterance.id,
+                    speaker_role="remote",
+                    display_label="Speaker",
+                    confidence=1.0,
+                    provenance="browser.caption_label",
                 )
             )
 
@@ -397,6 +420,7 @@ async def test_agent_queue_initial_turn_fifo_stream_cancel_and_resume(tmp_path: 
             "google_meet_own_name": " speaker ",
         }
     )
+    refresh_caption_speaker_assignments(database, settings.load())
     freeform = manager.enqueue_prompt(session.id, "What risks remain?")
     await _wait_for_status(database, freeform.id, {"completed"})
     await manager.stop()

@@ -5,8 +5,8 @@ from elsewise.persistence.models import (
     RecordingSegmentRecord,
     UiEventRecord,
     UtteranceRecord,
+    UtteranceSpeakerAssignmentRecord,
 )
-from elsewise.services.speaker_identity import SpeakerRole
 
 
 def segment_payload(record: RecordingSegmentRecord) -> dict[str, Any]:
@@ -31,9 +31,13 @@ def source_payload(
         "id": record.id,
         "paired_client_id": record.paired_client_id,
         "source_kind": record.source_kind,
+        "source_category": record.source_category,
+        "source_role": record.source_role,
+        "target_key": record.target_key,
         "platform": record.platform,
         "driver_id": record.driver_id,
         "driver_version": record.driver_version,
+        "protocol_version": record.protocol_version,
         "tab_instance_id": record.tab_instance_id,
         "capabilities": record.capabilities,
         "available": record.available,
@@ -48,7 +52,8 @@ def source_payload(
 
 
 def utterance_payload(
-    record: UtteranceRecord, *, speaker_role: SpeakerRole = "unknown"
+    record: UtteranceRecord,
+    assignment: UtteranceSpeakerAssignmentRecord | None = None,
 ) -> dict[str, Any]:
     return {
         "id": record.id,
@@ -57,8 +62,8 @@ def utterance_payload(
         "source_epoch_id": record.source_epoch_id,
         "utterance_id": record.utterance_id,
         "revision": record.revision,
-        "speaker": record.speaker,
-        "speaker_role": speaker_role,
+        "speaker": assignment.display_label if assignment else None,
+        "speaker_role": assignment.speaker_role if assignment else "unknown",
         "text": record.text,
         "final": record.final,
         "first_session_offset_us": record.first_session_offset_us,
@@ -67,6 +72,13 @@ def utterance_payload(
         "last_received_at": record.last_received_at.isoformat(),
         "first_client_seq": record.first_client_seq,
         "last_client_seq": record.last_client_seq,
+        "first_audio_sample_position": record.first_audio_sample_position,
+        "last_audio_sample_position": record.last_audio_sample_position,
+        "finalization_state": record.finalization_state,
+        "asr_backend": record.asr_backend,
+        "asr_model_id": record.asr_model_id,
+        "asr_model_version": record.asr_model_version,
+        "transcript_confidence": record.transcript_confidence,
     }
 
 

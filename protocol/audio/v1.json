@@ -1,0 +1,32 @@
+{
+  "name": "elsewise-audio",
+  "version": 1,
+  "endianness": "little",
+  "canonical_audio": {
+    "sample_rate": 16000,
+    "channels": 1,
+    "sample_format": "f32le"
+  },
+  "bounds": {
+    "control_message_bytes": 65536,
+    "audio_frame_samples": 3200,
+    "audio_payload_bytes": 12800
+  },
+  "audio_header": [
+    ["magic", "bytes[4]", "EWA1"],
+    ["protocol_version", "u16", 1],
+    ["flags", "u16", "bitset"],
+    ["source_id", "uuid[16]", "opaque"],
+    ["epoch_id", "uuid[16]", "opaque"],
+    ["sequence", "u64", "monotonic per epoch"],
+    ["source_sample_position", "u64", "first input sample"],
+    ["host_monotonic_ns", "u64", "helper monotonic clock"],
+    ["frame_samples", "u32", "canonical mono samples"],
+    ["payload_bytes", "u32", "frame_samples * 4"]
+  ],
+  "flags": {
+    "discontinuity": 1,
+    "xrun": 2,
+    "end_of_stream": 4
+  }
+}

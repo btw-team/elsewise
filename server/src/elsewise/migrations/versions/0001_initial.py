@@ -107,13 +107,16 @@ def upgrade() -> None:
     op.create_table(
         "capture_sources",
         sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("paired_client_id", sa.String(length=36), nullable=False),
+        sa.Column("paired_client_id", sa.String(length=36), nullable=True),
         sa.Column("source_kind", sa.String(length=64), nullable=False),
+        sa.Column("source_category", sa.String(length=32), nullable=False),
+        sa.Column("source_role", sa.String(length=32), nullable=False),
+        sa.Column("target_key", sa.String(length=256), nullable=True),
         sa.Column("platform", sa.String(length=64), nullable=False),
         sa.Column("driver_id", sa.String(length=128), nullable=False),
         sa.Column("driver_version", sa.String(length=64), nullable=False),
         sa.Column("protocol_version", sa.Integer(), nullable=False),
-        sa.Column("tab_instance_id", sa.String(length=128), nullable=False),
+        sa.Column("tab_instance_id", sa.String(length=128), nullable=True),
         sa.Column("activity_key", sa.String(length=256), nullable=True),
         sa.Column("capabilities", sa.JSON(), nullable=False),
         sa.Column("available", sa.Boolean(), nullable=False),
@@ -129,12 +132,36 @@ def upgrade() -> None:
             "health_status IN ('available', 'waiting', 'degraded', 'unavailable', 'failed')",
             name="ck_capture_sources_health",
         ),
-        sa.CheckConstraint("protocol_version = 2", name="ck_capture_sources_protocol"),
+        sa.CheckConstraint("protocol_version >= 1", name="ck_capture_sources_protocol"),
+        sa.CheckConstraint(
+            "source_category IN ('audio', 'captions', 'synthetic')",
+            name="ck_capture_sources_category",
+        ),
+        sa.CheckConstraint(
+            "source_role IN ('self', 'remote', 'secondary')",
+            name="ck_capture_sources_role",
+        ),
+        sa.CheckConstraint(
+            "source_kind IN ('native_microphone', 'native_process_audio', "
+            "'native_system_audio', 'browser_captions', 'synthetic_audio')",
+            name="ck_capture_sources_kind",
+        ),
+        sa.CheckConstraint(
+            "(source_kind = 'browser_captions' AND paired_client_id IS NOT NULL "
+            "AND tab_instance_id IS NOT NULL AND source_category = 'captions' "
+            "AND source_role = 'secondary') OR "
+            "(source_kind != 'browser_captions' AND paired_client_id IS NULL "
+            "AND tab_instance_id IS NULL)",
+            name="ck_capture_sources_identity",
+        ),
         sa.ForeignKeyConstraint(["paired_client_id"], ["paired_clients.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_capture_sources_paired_client_id", "capture_sources", ["paired_client_id"])
+    op.create_index("ix_capture_sources_source_category", "capture_sources", ["source_category"])
+    op.create_index("ix_capture_sources_source_role", "capture_sources", ["source_role"])
     op.create_index("ix_capture_sources_tab_instance_id", "capture_sources", ["tab_instance_id"])
+    op.create_index("ix_capture_sources_target_key", "capture_sources", ["target_key"])
     op.create_table(
         "ui_events",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -177,6 +204,11 @@ def upgrade() -> None:
         sa.Column("agent_reasoning_effort", sa.String(length=32), nullable=True),
         sa.Column("recording_status", sa.String(length=32), nullable=False),
         sa.Column("source_status", sa.String(length=64), nullable=False),
+        sa.Column("self_audio_enabled", sa.Boolean(), nullable=False),
+        sa.Column("remote_audio_enabled", sa.Boolean(), nullable=False),
+        sa.Column("secondary_fallback_enabled", sa.Boolean(), nullable=False),
+        sa.Column("requested_speech_profile", sa.String(length=32), nullable=False),
+        sa.Column("remote_target_key", sa.String(length=256), nullable=True),
         sa.Column("agent_status", sa.String(length=32), nullable=False),
         sa.Column("requested_agent_cwd", sa.Text(), nullable=True),
         sa.Column("resolved_agent_cwd", sa.Text(), nullable=True),
@@ -185,7 +217,6 @@ def upgrade() -> None:
         sa.Column("allow_network", sa.Boolean(), nullable=False),
         sa.Column("permissions_updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("permission_audit", sa.JSON(), nullable=False),
-        sa.Column("selected_source_id", sa.String(length=36), nullable=True),
         sa.Column("monotonic_origin_ns", sa.Integer(), nullable=True),
         sa.Column("stop_requested_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("stop_boundary_offset_us", sa.Integer(), nullable=True),
@@ -207,16 +238,20 @@ def upgrade() -> None:
             "stop_boundary_offset_us IS NULL OR stop_boundary_offset_us >= 0",
             name="ck_sessions_stop_boundary",
         ),
-        sa.ForeignKeyConstraint(["action_preset_id"], ["action_presets.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(
-            ["selected_source_id"], ["capture_sources.id"], ondelete="SET NULL"
+        sa.CheckConstraint(
+            "requested_speech_profile IN ('auto', 'conservative', 'standard', 'best')",
+            name="ck_sessions_speech_profile",
         ),
+        sa.CheckConstraint(
+            "self_audio_enabled = 1 OR remote_audio_enabled = 1 OR secondary_fallback_enabled = 1",
+            name="ck_sessions_at_least_one_source_lane",
+        ),
+        sa.ForeignKeyConstraint(["action_preset_id"], ["action_presets.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_sessions_action_preset_id", "sessions", ["action_preset_id"])
     op.create_index("ix_sessions_agent_provider", "sessions", ["agent_provider"])
     op.create_index("ix_sessions_recording_status", "sessions", ["recording_status"])
-    op.create_index("ix_sessions_selected_source_id", "sessions", ["selected_source_id"])
     op.create_index(
         "uq_sessions_one_active",
         "sessions",
@@ -259,12 +294,77 @@ def upgrade() -> None:
     )
     op.create_index("ix_recording_segments_session_id", "recording_segments", ["session_id"])
     op.create_table(
+        "session_source_bindings",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("session_id", sa.String(length=36), nullable=False),
+        sa.Column("segment_id", sa.String(length=36), nullable=True),
+        sa.Column("role", sa.String(length=32), nullable=False),
+        sa.Column("source_id", sa.String(length=36), nullable=True),
+        sa.Column("requested_mode", sa.String(length=32), nullable=False),
+        sa.Column("effective_mode", sa.String(length=32), nullable=False),
+        sa.Column("fallback_priority", sa.Integer(), nullable=False),
+        sa.Column("state", sa.String(length=32), nullable=False),
+        sa.Column("reason", sa.String(length=128), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("activated_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("stopped_at", sa.DateTime(timezone=True), nullable=True),
+        sa.CheckConstraint(
+            "effective_mode IN ('native', 'captions', 'synthetic', 'unavailable', 'disabled')",
+            name="ck_session_source_bindings_effective_mode",
+        ),
+        sa.CheckConstraint(
+            "fallback_priority >= 0", name="ck_session_source_bindings_fallback_priority"
+        ),
+        sa.CheckConstraint(
+            "requested_mode IN ('auto', 'explicit', 'disabled')",
+            name="ck_session_source_bindings_requested_mode",
+        ),
+        sa.CheckConstraint(
+            "role IN ('self', 'remote', 'secondary')",
+            name="ck_session_source_bindings_role",
+        ),
+        sa.CheckConstraint(
+            "state IN ('starting', 'active', 'waiting', 'degraded', 'stopping', "
+            "'stopped', 'disabled_by_user', 'failed')",
+            name="ck_session_source_bindings_state",
+        ),
+        sa.ForeignKeyConstraint(["segment_id"], ["recording_segments.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["session_id"], ["sessions.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["source_id"], ["capture_sources.id"], ondelete="SET NULL"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_session_source_bindings_role", "session_source_bindings", ["role"])
+    op.create_index(
+        "ix_session_source_bindings_segment_id", "session_source_bindings", ["segment_id"]
+    )
+    op.create_index(
+        "ix_session_source_bindings_session_id", "session_source_bindings", ["session_id"]
+    )
+    op.create_index(
+        "ix_session_source_bindings_source_id", "session_source_bindings", ["source_id"]
+    )
+    op.create_index("ix_session_source_bindings_state", "session_source_bindings", ["state"])
+    op.create_index(
+        "uq_session_source_bindings_active_role",
+        "session_source_bindings",
+        ["session_id", "role"],
+        unique=True,
+        sqlite_where=sa.text("state IN ('starting', 'active', 'waiting', 'degraded', 'stopping')"),
+    )
+    op.create_table(
         "source_epochs",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("source_id", sa.String(length=36), nullable=False),
+        sa.Column("binding_id", sa.String(length=36), nullable=True),
         sa.Column("session_id", sa.String(length=36), nullable=True),
         sa.Column("segment_id", sa.String(length=36), nullable=True),
         sa.Column("producer_epoch_id", sa.String(length=128), nullable=False),
+        sa.Column("session_offset_base_us", sa.Integer(), nullable=False),
+        sa.Column("helper_instance_id", sa.String(length=128), nullable=True),
+        sa.Column("helper_protocol_version", sa.Integer(), nullable=True),
+        sa.Column("effective_format", sa.JSON(), nullable=False),
+        sa.Column("effective_backend", sa.String(length=128), nullable=True),
         sa.Column("state", sa.String(length=32), nullable=False),
         sa.Column("started_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("ended_at", sa.DateTime(timezone=True), nullable=True),
@@ -278,11 +378,33 @@ def upgrade() -> None:
         sa.Column("dropped_event_count", sa.Integer(), nullable=False),
         sa.Column("received_event_count", sa.Integer(), nullable=False),
         sa.Column("rejected_event_count", sa.Integer(), nullable=False),
+        sa.Column("first_sequence", sa.Integer(), nullable=True),
+        sa.Column("last_sequence", sa.Integer(), nullable=True),
+        sa.Column("first_sample_position", sa.Integer(), nullable=True),
+        sa.Column("last_sample_position", sa.Integer(), nullable=True),
+        sa.Column("discontinuity_count", sa.Integer(), nullable=False),
+        sa.Column("xrun_count", sa.Integer(), nullable=False),
         sa.CheckConstraint(
             "reconnect_count >= 0 AND producer_restart_count >= 0 "
             "AND transport_error_count >= 0 AND dropped_event_count >= 0 "
-            "AND received_event_count >= 0 AND rejected_event_count >= 0",
+            "AND received_event_count >= 0 AND rejected_event_count >= 0 "
+            "AND discontinuity_count >= 0 AND xrun_count >= 0",
             name="ck_source_epochs_counters",
+        ),
+        sa.CheckConstraint(
+            "helper_protocol_version IS NULL OR helper_protocol_version >= 1",
+            name="ck_source_epochs_helper_protocol",
+        ),
+        sa.CheckConstraint(
+            "session_offset_base_us >= 0", name="ck_source_epochs_session_offset_base"
+        ),
+        sa.CheckConstraint(
+            "first_sample_position IS NULL OR last_sample_position >= first_sample_position",
+            name="ck_source_epochs_samples",
+        ),
+        sa.CheckConstraint(
+            "first_sequence IS NULL OR last_sequence >= first_sequence",
+            name="ck_source_epochs_sequences",
         ),
         sa.CheckConstraint(
             "state IN ('starting', 'running', 'stopping', 'stopped', 'failed')",
@@ -291,9 +413,11 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["segment_id"], ["recording_segments.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["session_id"], ["sessions.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["source_id"], ["capture_sources.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["binding_id"], ["session_source_bindings.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index("ix_source_epochs_segment_id", "source_epochs", ["segment_id"])
+    op.create_index("ix_source_epochs_binding_id", "source_epochs", ["binding_id"])
     op.create_index("ix_source_epochs_session_id", "source_epochs", ["session_id"])
     op.create_index("ix_source_epochs_source_id", "source_epochs", ["source_id"])
     op.create_index("ix_source_epochs_state", "source_epochs", ["state"])
@@ -406,7 +530,6 @@ def upgrade() -> None:
         sa.Column("source_epoch_id", sa.String(length=36), nullable=False),
         sa.Column("utterance_id", sa.String(length=256), nullable=False),
         sa.Column("revision", sa.Integer(), nullable=False),
-        sa.Column("speaker", sa.String(length=512), nullable=True),
         sa.Column("text", sa.Text(), nullable=False),
         sa.Column("final", sa.Boolean(), nullable=False),
         sa.Column("origin_kind", sa.String(length=64), nullable=False),
@@ -416,8 +539,16 @@ def upgrade() -> None:
         sa.Column("last_session_offset_us", sa.Integer(), nullable=False),
         sa.Column("first_received_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("last_received_at", sa.DateTime(timezone=True), nullable=False),
-        sa.Column("first_client_seq", sa.Integer(), nullable=False),
-        sa.Column("last_client_seq", sa.Integer(), nullable=False),
+        sa.Column("first_client_seq", sa.Integer(), nullable=True),
+        sa.Column("last_client_seq", sa.Integer(), nullable=True),
+        sa.Column("first_audio_sample_position", sa.Integer(), nullable=True),
+        sa.Column("last_audio_sample_position", sa.Integer(), nullable=True),
+        sa.Column("finalization_state", sa.String(length=32), nullable=False),
+        sa.Column("asr_backend", sa.String(length=128), nullable=True),
+        sa.Column("asr_model_id", sa.String(length=256), nullable=True),
+        sa.Column("asr_model_version", sa.String(length=128), nullable=True),
+        sa.Column("transcript_confidence", sa.Float(), nullable=True),
+        sa.Column("provenance", sa.JSON(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
         sa.CheckConstraint(
@@ -427,6 +558,15 @@ def upgrade() -> None:
         sa.CheckConstraint(
             "origin_confidence >= 0 AND origin_confidence <= 1",
             name="ck_utterances_origin_confidence",
+        ),
+        sa.CheckConstraint(
+            "first_audio_sample_position IS NULL OR last_audio_sample_position "
+            ">= first_audio_sample_position",
+            name="ck_utterances_audio_samples",
+        ),
+        sa.CheckConstraint(
+            "finalization_state IN ('partial', 'live_final', 'durable_final')",
+            name="ck_utterances_finalization_state",
         ),
         sa.CheckConstraint("projection_version >= 1", name="ck_utterances_projection_version"),
         sa.CheckConstraint("revision >= 1", name="ck_utterances_revision"),
@@ -439,6 +579,42 @@ def upgrade() -> None:
     op.create_index("ix_utterances_segment_id", "utterances", ["segment_id"])
     op.create_index("ix_utterances_session_id", "utterances", ["session_id"])
     op.create_index("ix_utterances_source_epoch_id", "utterances", ["source_epoch_id"])
+    op.create_table(
+        "utterance_speaker_assignments",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("utterance_id", sa.String(length=36), nullable=False),
+        sa.Column("revision", sa.Integer(), nullable=False),
+        sa.Column("speaker_role", sa.String(length=32), nullable=False),
+        sa.Column("display_label", sa.String(length=512), nullable=True),
+        sa.Column("speaker_profile_id", sa.String(length=36), nullable=True),
+        sa.Column("anonymous_track_id", sa.String(length=128), nullable=True),
+        sa.Column("confidence", sa.Float(), nullable=False),
+        sa.Column("evidence_refs", sa.JSON(), nullable=False),
+        sa.Column("provenance", sa.String(length=128), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_speaker_assignments_confidence",
+        ),
+        sa.CheckConstraint("revision >= 1", name="ck_speaker_assignments_revision"),
+        sa.CheckConstraint(
+            "speaker_role IN ('self', 'remote', 'unknown')",
+            name="ck_speaker_assignments_role",
+        ),
+        sa.ForeignKeyConstraint(["utterance_id"], ["utterances.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index(
+        "ix_utterance_speaker_assignments_speaker_role",
+        "utterance_speaker_assignments",
+        ["speaker_role"],
+    )
+    op.create_index(
+        "ix_utterance_speaker_assignments_utterance_id",
+        "utterance_speaker_assignments",
+        ["utterance_id"],
+        unique=True,
+    )
     op.create_table(
         "agent_messages",
         sa.Column("id", sa.String(length=36), nullable=False),
@@ -544,12 +720,14 @@ def upgrade() -> None:
 def downgrade() -> None:
     for table_name in (
         "agent_messages",
+        "utterance_speaker_assignments",
         "utterances",
         "source_epochs",
         "caption_event_counters",
         "caption_event_diagnostics",
         "caption_event_tombstones",
         "agent_runs",
+        "session_source_bindings",
         "recording_segments",
         "agent_threads",
         "sessions",

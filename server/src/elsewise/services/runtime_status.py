@@ -20,6 +20,7 @@ from elsewise.persistence.models import (
     PairedClientRecord,
     PairingRequestRecord,
     SessionRecord,
+    SessionSourceBindingRecord,
 )
 from elsewise.runtime.descriptor import RuntimeDescriptorStore
 from elsewise.settings.config import SettingsStore
@@ -123,9 +124,32 @@ class RuntimeStatusService:
             session = db.scalar(
                 select(SessionRecord).where(SessionRecord.recording_status == "running").limit(1)
             )
-            source = None
-            if session is not None and session.selected_source_id:
-                source = db.get(CaptureSourceRecord, session.selected_source_id)
+            lane_sources: list[tuple[SessionSourceBindingRecord, CaptureSourceRecord | None]] = []
+            if session is not None:
+                bindings = db.scalars(
+                    select(SessionSourceBindingRecord).where(
+                        SessionSourceBindingRecord.session_id == session.id,
+                        SessionSourceBindingRecord.state.in_(
+                            (
+                                "starting",
+                                "active",
+                                "waiting",
+                                "degraded",
+                                "stopping",
+                                "disabled_by_user",
+                            )
+                        ),
+                    )
+                )
+                lane_sources = [
+                    (
+                        binding,
+                        db.get(CaptureSourceRecord, binding.source_id)
+                        if binding.source_id is not None
+                        else None,
+                    )
+                    for binding in bindings
+                ]
             run_counts = {
                 status: int(count)
                 for status, count in db.execute(
@@ -203,15 +227,21 @@ class RuntimeStatusService:
                 if session is not None
                 else None
             ),
-            "source": (
+            "sources": [
                 {
-                    "platform": source.platform,
-                    "health_status": source.health_status,
-                    "connected": source.connected,
+                    "role": binding.role,
+                    "binding_state": binding.state,
+                    "requested_mode": binding.requested_mode,
+                    "effective_mode": binding.effective_mode,
+                    "reason": binding.reason,
+                    "source_id": binding.source_id,
+                    "source_kind": source.source_kind if source else None,
+                    "platform": source.platform if source else None,
+                    "health_status": source.health_status if source else "unavailable",
+                    "connected": source.connected if source else False,
                 }
-                if source is not None
-                else None
-            ),
+                for binding, source in lane_sources
+            ],
             "agent_work": {
                 "queued": run_counts.get("queued", 0),
                 "running": run_counts.get("starting", 0) + run_counts.get("streaming", 0),

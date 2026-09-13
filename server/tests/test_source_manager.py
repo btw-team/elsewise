@@ -8,6 +8,7 @@ from elsewise.persistence.database import Database
 from elsewise.persistence.models import (
     PairedClientRecord,
     SessionRecord,
+    SessionSourceBindingRecord,
     SourceEpochRecord,
     UtteranceRecord,
 )
@@ -105,19 +106,16 @@ async def test_multiple_sources_wait_for_selection_and_switch_stops_old_epoch(
     controller = SessionController(database, sources, TransitionExecutor())
 
     started = await controller.start(session.id)
-    assert started.selected_source_id is None
+    assert started.source_status == "waiting_for_source"
     assert started.source_status == "waiting_for_source"
     assert commands == []
 
-    selected = await controller.select_source(session.id, first_id)
-    assert selected.selected_source_id == first_id
+    await controller.select_source(session.id, first_id, role="secondary")
     assert [item["type"] for item in commands] == ["source.start"]
-    same = await controller.select_source(session.id, first_id)
-    assert same.selected_source_id == first_id
+    await controller.select_source(session.id, first_id, role="secondary")
     assert [item["type"] for item in commands] == ["source.start"]
 
-    switched = await controller.select_source(session.id, second_id)
-    assert switched.selected_source_id == second_id
+    await controller.select_source(session.id, second_id, role="secondary")
     assert [item["type"] for item in commands] == [
         "source.start",
         "source.stop",
@@ -130,6 +128,14 @@ async def test_multiple_sources_wait_for_selection_and_switch_stops_old_epoch(
         old = next(item for item in epochs if item.source_id == first_id)
         assert old.state == "stopped"
         assert old.end_reason == "source_switched"
+        binding = db.scalar(
+            select(SessionSourceBindingRecord).where(
+                SessionSourceBindingRecord.session_id == session.id,
+                SessionSourceBindingRecord.role == "secondary",
+                SessionSourceBindingRecord.state.in_(("active", "waiting", "degraded")),
+            )
+        )
+        assert binding is not None and binding.source_id == second_id
     database.dispose()
 
 
@@ -190,13 +196,20 @@ async def test_activity_change_creates_source_and_requires_new_selection(tmp_pat
     assert next_epoch is None
     current = SessionService(database).get(session.id)
     assert current.recording_status == "running"
-    assert current.selected_source_id == first_source
     assert current.source_status == "waiting_for_source"
     with database.transaction() as db:
         old = db.get(SourceEpochRecord, first_epoch)
         assert old is not None
         assert old.state == "stopped"
         assert old.end_reason == "activity_changed"
+        binding = db.scalar(
+            select(SessionSourceBindingRecord).where(
+                SessionSourceBindingRecord.session_id == session.id,
+                SessionSourceBindingRecord.role == "secondary",
+                SessionSourceBindingRecord.state == "waiting",
+            )
+        )
+        assert binding is not None and binding.source_id is None
     database.dispose()
 
 

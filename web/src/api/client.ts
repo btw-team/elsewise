@@ -62,6 +62,11 @@ export const api = {
     create_agent_cwd?: boolean;
     allow_workspace_write: boolean;
     allow_network: boolean;
+    self_audio_enabled: boolean;
+    remote_audio_enabled: boolean;
+    secondary_fallback_enabled: boolean;
+    requested_speech_profile: SessionSummary["requested_speech_profile"];
+    remote_target_key: string | null;
   }) =>
     request<SessionSummary>("/api/sessions", {
       method: "POST",
@@ -117,6 +122,11 @@ export const api = {
         | "requested_agent_cwd"
         | "allow_workspace_write"
         | "allow_network"
+        | "self_audio_enabled"
+        | "remote_audio_enabled"
+        | "secondary_fallback_enabled"
+        | "requested_speech_profile"
+        | "remote_target_key"
       >
     > & { create_agent_cwd?: boolean },
   ) =>
@@ -169,8 +179,12 @@ export const api = {
     request<PairedClient>(`/api/paired-clients/${clientId}`, {
       method: "DELETE",
     }),
-  selectSource: (sessionId: string, sourceId: string) =>
-    request<SessionSummary>(`/api/sessions/${sessionId}/source`, {
+  selectSource: (
+    sessionId: string,
+    role: "self" | "remote" | "secondary",
+    sourceId: string,
+  ) =>
+    request<SessionSummary>(`/api/sessions/${sessionId}/sources/${role}`, {
       method: "POST",
       body: JSON.stringify({ source_id: sourceId }),
     }),

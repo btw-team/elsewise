@@ -1,4 +1,5 @@
 from elsewise.sources.capabilities import SourceCapability
+from elsewise.sources.contracts import SourceCategory, SourceRole
 from elsewise.sources.registry import SourceDriver
 
 # The synthetic browser fixture uses the production transport and lifecycle
@@ -6,6 +7,9 @@ from elsewise.sources.registry import SourceDriver
 DRIVER = SourceDriver(
     id="synthetic_captions",
     version="2",
+    category=SourceCategory.CAPTIONS,
+    source_kinds=frozenset({"browser_captions"}),
+    supported_roles=frozenset({SourceRole.SECONDARY}),
     capabilities=frozenset(SourceCapability),
     required_capabilities=frozenset(
         {

@@ -3,7 +3,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from elsewise.runtime.locking import FileLock
 from elsewise.settings.json_store import RecoverableJsonFile, RecoveryNotice
@@ -131,11 +131,26 @@ class GlobalSettings(BaseModel):
     zoom_own_name: str = Field(default="", max_length=512)
     default_allow_workspace_write: bool = False
     default_allow_network: bool = False
+    default_self_audio_enabled: bool = True
+    default_remote_audio_enabled: bool = True
+    default_secondary_fallback_enabled: bool = True
+    default_speech_profile: Literal["auto", "conservative", "standard", "best"] = "auto"
+    default_remote_target_key: str = Field(default="", max_length=256)
 
     @field_validator("initial_prompts", mode="after")
     @classmethod
     def merge_supported_prompt_defaults(cls, value: dict[str, str]) -> dict[str, str]:
         return {**DEFAULT_INITIAL_PROMPTS, **value}
+
+    @model_validator(mode="after")
+    def at_least_one_default_source_lane(self) -> "GlobalSettings":
+        if not (
+            self.default_self_audio_enabled
+            or self.default_remote_audio_enabled
+            or self.default_secondary_fallback_enabled
+        ):
+            raise ValueError("at least one default source lane must be enabled")
+        return self
 
 
 @dataclass(slots=True)

@@ -6,7 +6,6 @@ from typing import Literal, Protocol
 
 class ContextUtterance(Protocol):
     id: str
-    speaker: str | None
     text: str
     final: bool
     last_received_at: datetime
@@ -46,9 +45,13 @@ class FrozenContext:
     utterance_count: int
 
 
-def format_utterance(utterance: ContextUtterance, speaker_role: str) -> str:
+def format_utterance(
+    utterance: ContextUtterance,
+    speaker_role: str,
+    speaker_label: str | None = None,
+) -> str:
     timestamp = utterance.last_received_at.isoformat()
-    speaker = utterance.speaker or "Unknown speaker"
+    speaker = speaker_label or getattr(utterance, "speaker", None) or "Unknown speaker"
     if speaker_role == "self":
         speaker = f"You ({speaker})"
     suffix = "" if utterance.final else " [partial]"
@@ -63,6 +66,7 @@ def freeze_context(
     hard_character_cap: int,
     previous_boundary_id: str | None = None,
     speaker_roles: Mapping[str, str] | None = None,
+    speaker_labels: Mapping[str, str | None] | None = None,
 ) -> FrozenContext:
     candidates = list(utterances)
     if strategy == "last_utterances":
@@ -80,8 +84,17 @@ def freeze_context(
             candidates = [item for item in candidates if item.last_received_at >= threshold]
 
     roles = speaker_roles or {}
+    labels = speaker_labels or {}
     rendered = [
-        (item, format_utterance(item, roles.get(item.id, "unknown"))) for item in candidates
+        (
+            item,
+            format_utterance(
+                item,
+                roles.get(item.id, "unknown"),
+                labels.get(item.id),
+            ),
+        )
+        for item in candidates
     ]
     truncated = False
     while rendered and len("\n".join(line for _, line in rendered)) > hard_character_cap:

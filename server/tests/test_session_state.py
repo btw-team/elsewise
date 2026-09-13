@@ -3,6 +3,7 @@ from itertools import product
 import pytest
 from elsewise.domain.session import SessionMachine, TransitionRejected
 from elsewise.domain.states import AgentStatus, RecordingStatus, SourceStatus
+from elsewise.sources.contracts import SourceRole
 
 
 def test_start_without_source_waits_and_enqueues_initial_turn_once() -> None:
@@ -19,7 +20,7 @@ def test_source_can_be_selected_and_lost_while_session_keeps_running() -> None:
     session = SessionMachine()
     session.start()
     session.select_source("meet-document")
-    assert session.selected_source_id == "meet-document"
+    assert session.selected_sources == {SourceRole.SECONDARY: "meet-document"}
     assert session.source_status is SourceStatus.CAPTIONS_NOT_DETECTED
     session.lose_source("meet-document")
     assert session.recording_status is RecordingStatus.RUNNING
@@ -37,7 +38,7 @@ def test_stop_and_restart_create_segment_without_repeating_initial_turn() -> Non
     assert first.enqueue_initial_turn is True
     assert second.segment_sequence == 2
     assert second.enqueue_initial_turn is False
-    assert session.selected_source_id is None
+    assert session.selected_sources == {}
 
 
 def test_transitional_conflicts_and_repeated_stop_are_typed() -> None:
@@ -75,7 +76,7 @@ def test_generated_transition_sequences_preserve_session_invariants() -> None:
             assert session.segment_sequence >= previous_segment
             previous_segment = session.segment_sequence
             if session.recording_status is RecordingStatus.STOPPED:
-                assert session.selected_source_id is None
+                assert session.selected_sources == {}
                 assert session.source_status is SourceStatus.NO_SOURCE
             if session.recording_status is RecordingStatus.RUNNING:
                 assert session.stop_boundary_offset_us is None

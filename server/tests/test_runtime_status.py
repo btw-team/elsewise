@@ -72,7 +72,7 @@ def test_runtime_status_api_and_websocket_are_bounded(tmp_path: Path) -> None:
             "connections",
             "pairing",
             "session",
-            "source",
+            "sources",
             "agent_work",
             "settings",
             "agents",
@@ -82,6 +82,27 @@ def test_runtime_status_api_and_websocket_are_bounded(tmp_path: Path) -> None:
         assert payload["settings"] == {"ui_language": "en", "ui_theme": "dark"}
         assert set(payload["agents"]) == {"codex", "claude"}
         assert forbidden.isdisjoint(collect_keys(payload))
+
+        audio = client.get("/api/audio/capabilities").json()
+        assert audio["status"] in {"ready", "unavailable"}
+        assert "platform" in audio
+        assert client.get("/api/speech/models").json() == {
+            "manifest_version": 1,
+            "items": [],
+        }
+        resolution = client.post(
+            "/api/speech/profiles/resolve",
+            json={"requested": "best", "language": "en", "ram_mb": 512},
+        ).json()
+        assert resolution == {
+            "requested": "best",
+            "effective": None,
+            "backend": None,
+            "model_id": None,
+            "model_version": None,
+            "provider": None,
+            "reason": "model_missing_or_incompatible",
+        }
 
         with app.state.database.transaction() as db:
             session = SessionRecord(title="Agent status")

@@ -1,9 +1,13 @@
 from elsewise.sources.capabilities import SourceCapability
+from elsewise.sources.contracts import SourceCategory, SourceRole
 from elsewise.sources.registry import SourceDriver
 
 DRIVER = SourceDriver(
     id="browser_captions",
     version="2",
+    category=SourceCategory.CAPTIONS,
+    source_kinds=frozenset({"browser_captions"}),
+    supported_roles=frozenset({SourceRole.SECONDARY}),
     capabilities=frozenset(SourceCapability),
     required_capabilities=frozenset(
         {

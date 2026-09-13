@@ -73,6 +73,7 @@ output/playwright/
 .playwright-cli/
 
 # Temporary files
+target/
 *.tmp
 *.temp
 *.swp

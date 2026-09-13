@@ -100,6 +100,11 @@ const fallbackSettings: GlobalSettings = {
   free_prompt_hard_character_cap: 50_000,
   default_allow_workspace_write: false,
   default_allow_network: false,
+  default_self_audio_enabled: true,
+  default_remote_audio_enabled: true,
+  default_secondary_fallback_enabled: true,
+  default_speech_profile: "auto",
+  default_remote_target_key: "",
 };
 
 function formatTime(value: string, language: UiLanguage): string {
@@ -497,17 +502,23 @@ export function App() {
     return [...items].sort(
       (left, right) =>
         left.first_session_offset_us - right.first_session_offset_us ||
-        left.first_client_seq - right.first_client_seq ||
+        (left.first_client_seq ?? -1) - (right.first_client_seq ?? -1) ||
         left.id.localeCompare(right.id),
     );
   }, [detail, selected]);
   const selectedDetail = detail?.session.id === selected?.id ? detail : null;
   const segments = selectedDetail?.segments ?? [];
+  const secondaryBinding = selected?.source_bindings.find(
+    (binding) => binding.role === "secondary",
+  );
   const selectedSource = snapshot.sources.find(
-    (source) => source.id === selected?.selected_source_id,
+    (source) => source.id === secondaryBinding?.source_id,
   );
   const availableSources = snapshot.sources.filter(
-    (source) => source.available && source.connected,
+    (source) =>
+      source.source_role === "secondary" &&
+      source.available &&
+      source.connected,
   );
   const agentRuns = selectedDetail?.agent_history.runs ?? [];
   const agentMessages = selectedDetail?.agent_history.messages ?? [];
@@ -639,6 +650,9 @@ export function App() {
         ? t("restartSession")
         : t("startSession");
   const sourceLabel = (source: CaptureSource) => {
+    if (source.paired_client_id === null) {
+      return `${source.source_role} · ${source.platform.replaceAll("_", " ")}`;
+    }
     const client = source.client_display_name ?? "Browser extension";
     const browser = source.browser_family ?? "browser";
     const platform = source.platform.replaceAll("_", " ");
@@ -830,11 +844,15 @@ export function App() {
               availableSources.length > 1 && (
                 <select
                   aria-label={t("source")}
-                  value={selected.selected_source_id ?? ""}
+                  value={secondaryBinding?.source_id ?? ""}
                   onChange={(event) => {
                     if (!selected || !event.target.value) return;
                     void api
-                      .selectSource(selected.id, event.target.value)
+                      .selectSource(
+                        selected.id,
+                        "secondary",
+                        event.target.value,
+                      )
                       .then(() => refresh())
                       .catch((caught: unknown) =>
                         setActionError(apiErrorMessage(caught, t)),

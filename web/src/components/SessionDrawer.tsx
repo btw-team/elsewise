@@ -35,6 +35,11 @@ interface SessionDraft {
   cwd: string;
   allowWrite: boolean;
   allowNetwork: boolean;
+  selfAudioEnabled: boolean;
+  remoteAudioEnabled: boolean;
+  secondaryFallbackEnabled: boolean;
+  speechProfile: SessionSummary["requested_speech_profile"];
+  remoteTargetKey: string;
 }
 
 function initialDraft(
@@ -65,6 +70,11 @@ function initialDraft(
       cwd: session.requested_agent_cwd ?? "",
       allowWrite: session.allow_workspace_write,
       allowNetwork: session.allow_network,
+      selfAudioEnabled: session.self_audio_enabled,
+      remoteAudioEnabled: session.remote_audio_enabled,
+      secondaryFallbackEnabled: session.secondary_fallback_enabled,
+      speechProfile: session.requested_speech_profile,
+      remoteTargetKey: session.remote_target_key ?? "",
     };
   }
   const language = defaults.default_meeting_language;
@@ -80,6 +90,11 @@ function initialDraft(
     cwd: "",
     allowWrite: defaults.default_allow_workspace_write,
     allowNetwork: defaults.default_allow_network,
+    selfAudioEnabled: defaults.default_self_audio_enabled,
+    remoteAudioEnabled: defaults.default_remote_audio_enabled,
+    secondaryFallbackEnabled: defaults.default_secondary_fallback_enabled,
+    speechProfile: defaults.default_speech_profile,
+    remoteTargetKey: defaults.default_remote_target_key,
   };
 }
 
@@ -167,6 +182,11 @@ export function SessionDrawer({
                     create_agent_cwd: createAgentCwd,
                     allow_workspace_write: draft.allowWrite,
                     allow_network: draft.allowNetwork,
+                    self_audio_enabled: draft.selfAudioEnabled,
+                    remote_audio_enabled: draft.remoteAudioEnabled,
+                    secondary_fallback_enabled: draft.secondaryFallbackEnabled,
+                    requested_speech_profile: draft.speechProfile,
+                    remote_target_key: draft.remoteTargetKey || null,
                   },
             )
           : await api.createSession({
@@ -182,6 +202,11 @@ export function SessionDrawer({
               create_agent_cwd: createAgentCwd,
               allow_workspace_write: draft.allowWrite,
               allow_network: draft.allowNetwork,
+              self_audio_enabled: draft.selfAudioEnabled,
+              remote_audio_enabled: draft.remoteAudioEnabled,
+              secondary_fallback_enabled: draft.secondaryFallbackEnabled,
+              requested_speech_profile: draft.speechProfile,
+              remote_target_key: draft.remoteTargetKey || null,
             });
       onSaved(saved);
     } catch (caught) {
@@ -323,6 +348,88 @@ export function SessionDrawer({
                     </option>
                   ))}
                 </select>
+              </label>
+              <fieldset disabled={prestartFieldsDisabled}>
+                <legend>{t("audioSources")}</legend>
+                <label className="inline-check">
+                  <input
+                    type="checkbox"
+                    checked={draft.selfAudioEnabled}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        selfAudioEnabled: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>{t("microphoneLane")}</span>
+                </label>
+                <label className="inline-check">
+                  <input
+                    type="checkbox"
+                    checked={draft.remoteAudioEnabled}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        remoteAudioEnabled: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>{t("remoteAudioLane")}</span>
+                </label>
+                <label className="inline-check">
+                  <input
+                    type="checkbox"
+                    checked={draft.secondaryFallbackEnabled}
+                    onChange={(event) =>
+                      setDraft((current) => ({
+                        ...current,
+                        secondaryFallbackEnabled: event.target.checked,
+                      }))
+                    }
+                  />
+                  <span>{t("captionsFallback")}</span>
+                </label>
+              </fieldset>
+              <label>
+                <FieldLabel lockReason={prestartLockReason}>
+                  {t("speechProfile")}
+                </FieldLabel>
+                <select
+                  disabled={prestartFieldsDisabled}
+                  value={draft.speechProfile}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      speechProfile: event.target
+                        .value as SessionSummary["requested_speech_profile"],
+                    }))
+                  }
+                >
+                  {(["auto", "conservative", "standard", "best"] as const).map(
+                    (profile) => (
+                      <option key={profile} value={profile}>
+                        {t(`speechProfile_${profile}`)}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+              <label>
+                <FieldLabel lockReason={prestartLockReason}>
+                  {t("remoteTarget")}
+                </FieldLabel>
+                <input
+                  disabled={prestartFieldsDisabled || !draft.remoteAudioEnabled}
+                  maxLength={256}
+                  value={draft.remoteTargetKey}
+                  onChange={(event) =>
+                    setDraft((current) => ({
+                      ...current,
+                      remoteTargetKey: event.target.value,
+                    }))
+                  }
+                />
               </label>
               <label>
                 <FieldLabel

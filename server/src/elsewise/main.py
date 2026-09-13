@@ -26,6 +26,8 @@ from elsewise.api.pairing import pairing_websocket
 from elsewise.api.router import ui_websocket
 from elsewise.api.runtime import runtime_websocket
 from elsewise.api.security import safe_http_request
+from elsewise.audio.helper_process import AudioHelperSupervisor, resolve_audio_helper
+from elsewise.audio.runtime import AudioRuntime
 from elsewise.observability import RuntimeDiagnostics
 from elsewise.persistence.database import Database
 from elsewise.services.errors import ServiceError
@@ -39,6 +41,7 @@ from elsewise.settings.config import SettingsStore
 from elsewise.settings.paths import AppPaths
 from elsewise.sources.connections import BrowserConnectionRegistry
 from elsewise.sources.manager import SourceManager
+from elsewise.speech.models import ModelRegistry
 
 
 def _register_web_asset_media_types() -> None:
@@ -60,6 +63,8 @@ def create_app(
     database = Database(resolved_url) if resolved_url else Database.from_path(paths.database)
     pairing = PairingService(database)
     settings = SettingsStore(settings_path or paths.config / "settings.json")
+    audio_runtime = AudioRuntime(AudioHelperSupervisor(resolve_audio_helper()))
+    model_registry = ModelRegistry.empty(paths.cache / "models")
     provider = agent_provider
     if provider is None:
         configured = settings.load()
@@ -106,9 +111,12 @@ def create_app(
                     await session_controller.close()
                 finally:
                     try:
-                        await agent_queue.stop()
+                        await audio_runtime.close()
                     finally:
-                        database.dispose()
+                        try:
+                            await agent_queue.stop()
+                        finally:
+                            database.dispose()
 
     application = FastAPI(title="Elsewise", version=__version__, lifespan=lifespan)
     application.state.database = database
@@ -122,6 +130,8 @@ def create_app(
     application.state.browser_connections = browser_connections
     application.state.source_manager = source_manager
     application.state.session_controller = session_controller
+    application.state.audio_runtime = audio_runtime
+    application.state.model_registry = model_registry
     application.state.request_shutdown = None
 
     def valid_control_request(request: Request) -> bool:

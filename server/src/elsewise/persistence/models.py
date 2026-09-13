@@ -53,6 +53,14 @@ class SessionRecord(Base):
             "stop_boundary_offset_us IS NULL OR stop_boundary_offset_us >= 0",
             name="ck_sessions_stop_boundary",
         ),
+        CheckConstraint(
+            "requested_speech_profile IN ('auto', 'conservative', 'standard', 'best')",
+            name="ck_sessions_speech_profile",
+        ),
+        CheckConstraint(
+            "self_audio_enabled = 1 OR remote_audio_enabled = 1 OR secondary_fallback_enabled = 1",
+            name="ck_sessions_at_least_one_source_lane",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -68,6 +76,11 @@ class SessionRecord(Base):
     agent_reasoning_effort: Mapped[str | None] = mapped_column(String(32))
     recording_status: Mapped[str] = mapped_column(String(32), default="stopped", index=True)
     source_status: Mapped[str] = mapped_column(String(64), default="no_source")
+    self_audio_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    remote_audio_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    secondary_fallback_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    requested_speech_profile: Mapped[str] = mapped_column(String(32), default="auto")
+    remote_target_key: Mapped[str | None] = mapped_column(String(256))
     agent_status: Mapped[str] = mapped_column(String(32), default="not_started")
     requested_agent_cwd: Mapped[str | None] = mapped_column(Text)
     resolved_agent_cwd: Mapped[str | None] = mapped_column(Text)
@@ -76,9 +89,6 @@ class SessionRecord(Base):
     allow_network: Mapped[bool] = mapped_column(Boolean, default=False)
     permissions_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     permission_audit: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
-    selected_source_id: Mapped[str | None] = mapped_column(
-        ForeignKey("capture_sources.id", ondelete="SET NULL"), index=True
-    )
     monotonic_origin_ns: Mapped[int | None] = mapped_column(Integer)
     stop_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     stop_boundary_offset_us: Mapped[int | None] = mapped_column(Integer)
@@ -112,7 +122,28 @@ class RecordingSegmentRecord(Base):
 class CaptureSourceRecord(Base):
     __tablename__ = "capture_sources"
     __table_args__ = (
-        CheckConstraint("protocol_version = 2", name="ck_capture_sources_protocol"),
+        CheckConstraint("protocol_version >= 1", name="ck_capture_sources_protocol"),
+        CheckConstraint(
+            "source_category IN ('audio', 'captions', 'synthetic')",
+            name="ck_capture_sources_category",
+        ),
+        CheckConstraint(
+            "source_role IN ('self', 'remote', 'secondary')",
+            name="ck_capture_sources_role",
+        ),
+        CheckConstraint(
+            "source_kind IN ('native_microphone', 'native_process_audio', "
+            "'native_system_audio', 'browser_captions', 'synthetic_audio')",
+            name="ck_capture_sources_kind",
+        ),
+        CheckConstraint(
+            "(source_kind = 'browser_captions' AND paired_client_id IS NOT NULL "
+            "AND tab_instance_id IS NOT NULL AND source_category = 'captions' "
+            "AND source_role = 'secondary') OR "
+            "(source_kind != 'browser_captions' AND paired_client_id IS NULL "
+            "AND tab_instance_id IS NULL)",
+            name="ck_capture_sources_identity",
+        ),
         CheckConstraint(
             "health_status IN ('available', 'waiting', 'degraded', 'unavailable', 'failed')",
             name="ck_capture_sources_health",
@@ -120,15 +151,18 @@ class CaptureSourceRecord(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    paired_client_id: Mapped[str] = mapped_column(
+    paired_client_id: Mapped[str | None] = mapped_column(
         ForeignKey("paired_clients.id", ondelete="CASCADE"), index=True
     )
     source_kind: Mapped[str] = mapped_column(String(64), default="browser_captions")
+    source_category: Mapped[str] = mapped_column(String(32), default="captions", index=True)
+    source_role: Mapped[str] = mapped_column(String(32), default="secondary", index=True)
+    target_key: Mapped[str | None] = mapped_column(String(256), index=True)
     platform: Mapped[str] = mapped_column(String(64))
     driver_id: Mapped[str] = mapped_column(String(128), default="browser_captions")
     driver_version: Mapped[str] = mapped_column(String(64), default="unknown")
     protocol_version: Mapped[int] = mapped_column(Integer, default=2)
-    tab_instance_id: Mapped[str] = mapped_column(String(128), index=True)
+    tab_instance_id: Mapped[str | None] = mapped_column(String(128), index=True)
     activity_key: Mapped[str | None] = mapped_column(String(256))
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
     available: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -184,6 +218,62 @@ class PairingRequestRecord(Base):
     decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class SessionSourceBindingRecord(Base):
+    __tablename__ = "session_source_bindings"
+    __table_args__ = (
+        Index(
+            "uq_session_source_bindings_active_role",
+            "session_id",
+            "role",
+            unique=True,
+            sqlite_where=text("state IN ('starting', 'active', 'waiting', 'degraded', 'stopping')"),
+        ),
+        CheckConstraint(
+            "role IN ('self', 'remote', 'secondary')",
+            name="ck_session_source_bindings_role",
+        ),
+        CheckConstraint(
+            "requested_mode IN ('auto', 'explicit', 'disabled')",
+            name="ck_session_source_bindings_requested_mode",
+        ),
+        CheckConstraint(
+            "effective_mode IN ('native', 'captions', 'synthetic', 'unavailable', 'disabled')",
+            name="ck_session_source_bindings_effective_mode",
+        ),
+        CheckConstraint(
+            "state IN ('starting', 'active', 'waiting', 'degraded', 'stopping', "
+            "'stopped', 'disabled_by_user', 'failed')",
+            name="ck_session_source_bindings_state",
+        ),
+        CheckConstraint(
+            "fallback_priority >= 0", name="ck_session_source_bindings_fallback_priority"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), index=True
+    )
+    segment_id: Mapped[str | None] = mapped_column(
+        ForeignKey("recording_segments.id", ondelete="CASCADE"), index=True
+    )
+    role: Mapped[str] = mapped_column(String(32), index=True)
+    source_id: Mapped[str | None] = mapped_column(
+        ForeignKey("capture_sources.id", ondelete="SET NULL"), index=True
+    )
+    requested_mode: Mapped[str] = mapped_column(String(32), default="auto")
+    effective_mode: Mapped[str] = mapped_column(String(32), default="unavailable")
+    fallback_priority: Mapped[int] = mapped_column(Integer, default=0)
+    state: Mapped[str] = mapped_column(String(32), default="waiting", index=True)
+    reason: Mapped[str | None] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    stopped_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class SourceEpochRecord(Base):
     __tablename__ = "source_epochs"
     __table_args__ = (
@@ -201,14 +291,31 @@ class SourceEpochRecord(Base):
         CheckConstraint(
             "reconnect_count >= 0 AND producer_restart_count >= 0 "
             "AND transport_error_count >= 0 AND dropped_event_count >= 0 "
-            "AND received_event_count >= 0 AND rejected_event_count >= 0",
+            "AND received_event_count >= 0 AND rejected_event_count >= 0 "
+            "AND discontinuity_count >= 0 AND xrun_count >= 0",
             name="ck_source_epochs_counters",
         ),
+        CheckConstraint(
+            "first_sequence IS NULL OR last_sequence >= first_sequence",
+            name="ck_source_epochs_sequences",
+        ),
+        CheckConstraint(
+            "first_sample_position IS NULL OR last_sample_position >= first_sample_position",
+            name="ck_source_epochs_samples",
+        ),
+        CheckConstraint(
+            "helper_protocol_version IS NULL OR helper_protocol_version >= 1",
+            name="ck_source_epochs_helper_protocol",
+        ),
+        CheckConstraint("session_offset_base_us >= 0", name="ck_source_epochs_session_offset_base"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     source_id: Mapped[str] = mapped_column(
         ForeignKey("capture_sources.id", ondelete="CASCADE"), index=True
+    )
+    binding_id: Mapped[str | None] = mapped_column(
+        ForeignKey("session_source_bindings.id", ondelete="CASCADE"), index=True
     )
     session_id: Mapped[str | None] = mapped_column(
         ForeignKey("sessions.id", ondelete="CASCADE"), index=True
@@ -217,6 +324,11 @@ class SourceEpochRecord(Base):
         ForeignKey("recording_segments.id", ondelete="CASCADE"), index=True
     )
     producer_epoch_id: Mapped[str] = mapped_column(String(128))
+    session_offset_base_us: Mapped[int] = mapped_column(Integer, default=0)
+    helper_instance_id: Mapped[str | None] = mapped_column(String(128))
+    helper_protocol_version: Mapped[int | None] = mapped_column(Integer)
+    effective_format: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    effective_backend: Mapped[str | None] = mapped_column(String(128))
     state: Mapped[str] = mapped_column(String(32), default="running", index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -230,6 +342,12 @@ class SourceEpochRecord(Base):
     dropped_event_count: Mapped[int] = mapped_column(Integer, default=0)
     received_event_count: Mapped[int] = mapped_column(Integer, default=0)
     rejected_event_count: Mapped[int] = mapped_column(Integer, default=0)
+    first_sequence: Mapped[int | None] = mapped_column(Integer)
+    last_sequence: Mapped[int | None] = mapped_column(Integer)
+    first_sample_position: Mapped[int | None] = mapped_column(Integer)
+    last_sample_position: Mapped[int | None] = mapped_column(Integer)
+    discontinuity_count: Mapped[int] = mapped_column(Integer, default=0)
+    xrun_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class CaptionEventTombstoneRecord(Base):
@@ -293,6 +411,15 @@ class UtteranceRecord(Base):
             name="ck_utterances_origin_confidence",
         ),
         CheckConstraint("projection_version >= 1", name="ck_utterances_projection_version"),
+        CheckConstraint(
+            "first_audio_sample_position IS NULL OR last_audio_sample_position "
+            ">= first_audio_sample_position",
+            name="ck_utterances_audio_samples",
+        ),
+        CheckConstraint(
+            "finalization_state IN ('partial', 'live_final', 'durable_final')",
+            name="ck_utterances_finalization_state",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
@@ -307,7 +434,6 @@ class UtteranceRecord(Base):
     )
     utterance_id: Mapped[str] = mapped_column(String(256))
     revision: Mapped[int] = mapped_column(Integer)
-    speaker: Mapped[str | None] = mapped_column(String(512))
     text: Mapped[str] = mapped_column(Text)
     final: Mapped[bool] = mapped_column(Boolean, default=False)
     origin_kind: Mapped[str] = mapped_column(String(64), default="browser_captions")
@@ -317,9 +443,48 @@ class UtteranceRecord(Base):
     last_session_offset_us: Mapped[int] = mapped_column(Integer)
     first_received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-    first_client_seq: Mapped[int] = mapped_column(Integer)
-    last_client_seq: Mapped[int] = mapped_column(Integer)
+    first_client_seq: Mapped[int | None] = mapped_column(Integer)
+    last_client_seq: Mapped[int | None] = mapped_column(Integer)
+    first_audio_sample_position: Mapped[int | None] = mapped_column(Integer)
+    last_audio_sample_position: Mapped[int | None] = mapped_column(Integer)
+    finalization_state: Mapped[str] = mapped_column(String(32), default="partial")
+    asr_backend: Mapped[str | None] = mapped_column(String(128))
+    asr_model_id: Mapped[str | None] = mapped_column(String(256))
+    asr_model_version: Mapped[str | None] = mapped_column(String(128))
+    transcript_confidence: Mapped[float | None] = mapped_column(Float)
+    provenance: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class UtteranceSpeakerAssignmentRecord(Base):
+    __tablename__ = "utterance_speaker_assignments"
+    __table_args__ = (
+        CheckConstraint("revision >= 1", name="ck_speaker_assignments_revision"),
+        CheckConstraint(
+            "speaker_role IN ('self', 'remote', 'unknown')",
+            name="ck_speaker_assignments_role",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_speaker_assignments_confidence",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    utterance_id: Mapped[str] = mapped_column(
+        ForeignKey("utterances.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    revision: Mapped[int] = mapped_column(Integer, default=1)
+    speaker_role: Mapped[str] = mapped_column(String(32), default="unknown", index=True)
+    display_label: Mapped[str | None] = mapped_column(String(512))
+    speaker_profile_id: Mapped[str | None] = mapped_column(String(36))
+    anonymous_track_id: Mapped[str | None] = mapped_column(String(128))
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    evidence_refs: Mapped[list[str]] = mapped_column(JSON, default=list)
+    provenance: Mapped[str] = mapped_column(String(128), default="unknown")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )

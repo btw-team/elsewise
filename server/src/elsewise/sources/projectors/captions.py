@@ -2,7 +2,9 @@ from collections.abc import Callable
 from time import monotonic_ns
 
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
+from elsewise.evidence.contracts import EvidenceEvent
 from elsewise.observability import log_event
 from elsewise.persistence.database import Database
 from elsewise.persistence.models import (
@@ -13,6 +15,7 @@ from elsewise.persistence.models import (
     SessionRecord,
     SourceEpochRecord,
     UtteranceRecord,
+    UtteranceSpeakerAssignmentRecord,
     utc_now,
 )
 from elsewise.protocol.models import CaptionFinalize, CaptionUpsert
@@ -101,6 +104,20 @@ class CaptionProjector:
                 result, reason = "stale", "stale_revision"
 
             if result == "applied" and epoch is not None and session is not None:
+                evidence = EvidenceEvent(
+                    event_id=event_id,
+                    source_id=source_id,
+                    source_epoch_id=epoch_id,
+                    capability="captions",
+                    kind=message.type,
+                    interval_start_us=session_offset_us,
+                    interval_end_us=session_offset_us,
+                    observed_monotonic_us=self._monotonic_us(),
+                    timing_uncertainty_us=0,
+                    provenance="browser.protocol.v2",
+                    confidence=1.0,
+                    payload={"utterance_id": message.utterance_id},
+                )
                 if existing is None:
                     existing = UtteranceRecord(
                         session_id=session.id,
@@ -108,7 +125,6 @@ class CaptionProjector:
                         source_epoch_id=epoch.id,
                         utterance_id=message.utterance_id,
                         revision=message.revision,
-                        speaker=message.speaker,
                         text=message.text,
                         final=isinstance(message, CaptionFinalize),
                         origin_kind="browser_captions",
@@ -120,12 +136,19 @@ class CaptionProjector:
                         last_received_at=received_at,
                         first_client_seq=message.client_seq,
                         last_client_seq=message.client_seq,
+                        finalization_state=(
+                            "durable_final" if isinstance(message, CaptionFinalize) else "partial"
+                        ),
+                        provenance={
+                            "evidence_event_id": evidence.event_id,
+                            "evidence_kind": evidence.kind,
+                        },
                     )
                     db.add(existing)
+                    db.flush()
                     ui_type = "utterance.finalized" if existing.final else "utterance.created"
                 else:
                     existing.revision = message.revision
-                    existing.speaker = message.speaker
                     existing.text = message.text
                     existing.last_session_offset_us = max(
                         existing.last_session_offset_us, session_offset_us
@@ -133,7 +156,19 @@ class CaptionProjector:
                     existing.last_received_at = received_at
                     existing.last_client_seq = message.client_seq
                     existing.final = isinstance(message, CaptionFinalize)
+                    existing.finalization_state = "durable_final" if existing.final else "partial"
+                    existing.provenance = {
+                        "evidence_event_id": evidence.event_id,
+                        "evidence_kind": evidence.kind,
+                    }
                     ui_type = "utterance.finalized" if existing.final else "utterance.updated"
+                assignment = self._upsert_speaker_assignment(
+                    db,
+                    existing,
+                    label=message.speaker,
+                    platform=source.platform if source else "synthetic",
+                    evidence_event_id=evidence.event_id,
+                )
                 epoch.last_seen_at = received_at
                 epoch.received_event_count += 1
                 emit_ui_event(
@@ -141,7 +176,9 @@ class CaptionProjector:
                     ui_type,
                     existing.id,
                     self._utterance_payload(
-                        existing, source_id, source.platform if source else "synthetic"
+                        existing,
+                        assignment,
+                        source_id,
                     ),
                 )
             elif epoch is not None:
@@ -193,8 +230,51 @@ class CaptionProjector:
                 log_event("caption.processed", source_id=source_id, result=result, reason=reason)
             return result
 
+    def _upsert_speaker_assignment(
+        self,
+        db: Session,
+        record: UtteranceRecord,
+        *,
+        label: str | None,
+        platform: str,
+        evidence_event_id: str,
+    ) -> UtteranceSpeakerAssignmentRecord:
+        assignment = db.scalar(
+            select(UtteranceSpeakerAssignmentRecord).where(
+                UtteranceSpeakerAssignmentRecord.utterance_id == record.id
+            )
+        )
+        classified = (
+            classify_speaker(label, platform, own_speaker_names(self.settings.load()))
+            if self.settings is not None
+            else "unknown"
+        )
+        role = "remote" if classified == "other" else classified
+        if assignment is None:
+            assignment = UtteranceSpeakerAssignmentRecord(
+                utterance_id=record.id,
+                revision=1,
+                speaker_role=role,
+                display_label=label,
+                confidence=1.0 if role != "unknown" else 0.0,
+                evidence_refs=[evidence_event_id],
+                provenance="browser.caption_label",
+            )
+            db.add(assignment)
+        elif assignment.display_label != label or assignment.speaker_role != role:
+            assignment.revision += 1
+            assignment.speaker_role = role
+            assignment.display_label = label
+            assignment.confidence = 1.0 if role != "unknown" else 0.0
+            assignment.evidence_refs = [evidence_event_id]
+            assignment.provenance = "browser.caption_label"
+        return assignment
+
+    @staticmethod
     def _utterance_payload(
-        self, record: UtteranceRecord, source_id: str, platform: str
+        record: UtteranceRecord,
+        assignment: UtteranceSpeakerAssignmentRecord,
+        source_id: str,
     ) -> dict[str, object]:
         return {
             "id": record.id,
@@ -204,12 +284,8 @@ class CaptionProjector:
             "source_epoch_id": record.source_epoch_id,
             "utterance_id": record.utterance_id,
             "revision": record.revision,
-            "speaker": record.speaker,
-            "speaker_role": (
-                classify_speaker(record.speaker, platform, own_speaker_names(self.settings.load()))
-                if self.settings is not None
-                else "unknown"
-            ),
+            "speaker": assignment.display_label,
+            "speaker_role": assignment.speaker_role,
             "text": record.text,
             "final": record.final,
             "first_session_offset_us": record.first_session_offset_us,

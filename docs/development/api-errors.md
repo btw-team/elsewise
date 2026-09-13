@@ -39,6 +39,11 @@ DE, and PT-BR; an unknown code appears in a localized fallback.
 | 422  | `invalid_initial_prompt`         | The initial prompt is blank or invalid.                  |
 | 403  | `invalid_origin`                 | The request violates the loopback origin policy.         |
 | 422  | `invalid_session_id`             | The session identifier is malformed.                     |
+| 422  | `invalid_settings`               | The combined global settings are invalid.                |
+| 422  | `invalid_source_configuration`   | A Session must keep at least one capture lane enabled.    |
+| 422  | `invalid_source_id`              | The native source identifier is malformed.               |
+| 422  | `invalid_source_role`            | The requested source role is unknown.                    |
+| 422  | `invalid_source_target`          | The native source target is malformed.                   |
 | 404  | `not_found`                      | The requested API route or resource does not exist.      |
 | 409  | `preset_action_duplicate`        | An action appears more than once in a preset.            |
 | 409  | `preset_action_limit_reached`    | The preset action limit has been reached.                |
@@ -56,6 +61,9 @@ DE, and PT-BR; an unknown code appears in a localized fallback.
 | 409  | `session_not_running`            | The operation requires a running session.                |
 | 409  | `session_running`                | The operation requires a stopped session.                |
 | 503  | `shutdown_unavailable`           | The server runtime cannot currently accept shutdown.     |
+| 422  | `source_driver_mismatch`         | The source descriptor and driver do not match.           |
+| 409  | `source_role_disabled`           | The requested source lane is disabled.                   |
+| 422  | `source_role_mismatch`           | The source cannot fill the requested lane.               |
 | 409  | `ui_event_cursor_pruned`         | The requested UI event cursor predates retained history. |
 | 500  | `unsafe_export_path`             | The resolved export path escaped its permitted root.     |
 
