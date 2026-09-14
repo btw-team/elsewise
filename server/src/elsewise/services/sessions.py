@@ -362,7 +362,25 @@ class SessionService:
                     record.stopped_at = None
                     record.stop_requested_at = None
                     record.stop_boundary_offset_us = None
-                    record.monotonic_origin_ns = monotonic_ns()
+                    current_monotonic_ns = monotonic_ns()
+                    previous_timeline_end_us = (
+                        db.scalar(
+                            select(func.max(UtteranceRecord.last_session_offset_us)).where(
+                                UtteranceRecord.session_id == record.id
+                            )
+                        )
+                        or 0
+                    )
+                    if record.monotonic_origin_ns is None:
+                        record.monotonic_origin_ns = current_monotonic_ns
+                    elif (
+                        current_monotonic_ns - record.monotonic_origin_ns
+                    ) // 1_000 <= previous_timeline_end_us:
+                        # A process/OS monotonic-clock reset must not place a restarted
+                        # recording segment before already persisted utterances.
+                        record.monotonic_origin_ns = (
+                            current_monotonic_ns - (previous_timeline_end_us + 1) * 1_000
+                        )
                     record.source_status = "waiting_for_source"
                     record.version += 1
                     segment = RecordingSegmentRecord(

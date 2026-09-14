@@ -53,6 +53,64 @@ describe("App live", () => {
     ).toHaveLength(snapshotsBefore);
   });
 
+  it("orders asynchronously delivered utterances by the session timeline", async () => {
+    render(<App />);
+    await screen.findByText(/Safe transcript/);
+    FakeWebSocket.instances.at(-1)?.receive({
+      type: "ui.event",
+      protocol_version: 2,
+      event_id: 5,
+      event_type: "utterance.created",
+      aggregate_id: "utterance-earlier",
+      created_at: "2026-08-13T10:00:30Z",
+      payload: {
+        ...snapshot.utterances[0],
+        id: "utterance-earlier",
+        utterance_id: "native-earlier",
+        text: "Earlier live result",
+        first_session_offset_us: 30_000_000,
+        last_session_offset_us: 31_000_000,
+      },
+    });
+
+    await screen.findByText("Earlier live result");
+    expect(
+      [...document.querySelectorAll(".utterance-body p")].map(
+        (element) => element.textContent,
+      ),
+    ).toEqual([
+      "Earlier live result",
+      '<img src=x onerror="alert(1)"> Safe transcript',
+    ]);
+  });
+
+  it("keeps the app rendered when a live utterance has an invalid timestamp", async () => {
+    render(<App />);
+    await screen.findByText(/Safe transcript/);
+    const payload = structuredClone(snapshot.utterances[0]) as Partial<
+      (typeof snapshot.utterances)[number]
+    >;
+    payload.id = "utterance-without-time";
+    payload.utterance_id = "native-without-time";
+    payload.text = "Transcript remains visible";
+    delete payload.last_received_at;
+
+    FakeWebSocket.instances.at(-1)?.receive({
+      type: "ui.event",
+      protocol_version: 2,
+      event_id: 5,
+      event_type: "utterance.created",
+      aggregate_id: payload.id,
+      created_at: "2026-08-13T10:03:00Z",
+      payload,
+    });
+
+    expect(await screen.findByText("Transcript remains visible")).toBeVisible();
+    expect(
+      screen.getByRole("heading", { name: "Product planning" }),
+    ).toBeVisible();
+  });
+
   it("renders live session state and transcript as escaped text", async () => {
     render(<App />);
     expect(

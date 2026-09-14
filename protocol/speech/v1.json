@@ -1,0 +1,43 @@
+{
+  "name": "elsewise-speech-worker",
+  "version": 1,
+  "transport": {
+    "unix": "length-prefixed JSON on a user-private Unix domain socket",
+    "windows": "named-pipe transport is deferred to release expansion"
+  },
+  "bounds": {
+    "message_bytes": 65536,
+    "audio_frame_samples": 3200,
+    "streams": 8,
+    "idempotency_entries": 256
+  },
+  "messages": {
+    "handshake": ["worker.hello", "daemon.hello", "worker.ready"],
+    "lifecycle": [
+      "stream.create",
+      "stream.created",
+      "stream.flush",
+      "stream.flushed",
+      "stream.close",
+      "stream.closed"
+    ],
+    "inference": ["audio.push", "audio.result"],
+    "operations": [
+      "worker.health",
+      "worker.health_result",
+      "worker.shutdown",
+      "worker.shutdown_ack"
+    ],
+    "errors": ["worker.error"]
+  },
+  "audio": {
+    "format": "mono / 16 kHz / f32le",
+    "encoding": "base64 per bounded audio.push message",
+    "retention": "RAM only; never persisted by the worker"
+  },
+  "profiles": {
+    "conservative": "Silero VAD + multilingual Whisper Base INT8",
+    "standard": "Silero VAD + Nemotron 3.5 streaming ASR 0.6B 560ms INT8",
+    "best": "Standard live recognition + Parakeet TDT 0.6B v3 INT8 finalization"
+  }
+}

@@ -42,6 +42,8 @@ from elsewise.settings.paths import AppPaths
 from elsewise.sources.connections import BrowserConnectionRegistry
 from elsewise.sources.manager import SourceManager
 from elsewise.speech.models import ModelRegistry
+from elsewise.speech.session_runtime import NativeSessionRuntime
+from elsewise.speech.worker_supervisor import SpeechWorkerSupervisor
 
 
 def _register_web_asset_media_types() -> None:
@@ -87,7 +89,22 @@ def create_app(
     browser_connections = BrowserConnectionRegistry()
     source_manager = SourceManager(database, browser_connections)
     transition_executor = TransitionExecutor()
-    session_controller = SessionController(database, source_manager, transition_executor)
+    native_session_runtime = (
+        None
+        if os.environ.get("ELSEWISE_DISABLE_NATIVE_AUDIO") == "1"
+        else NativeSessionRuntime(
+            database,
+            source_manager,
+            audio_runtime,
+            SpeechWorkerSupervisor(),
+        )
+    )
+    session_controller = SessionController(
+        database,
+        source_manager,
+        transition_executor,
+        native_session_runtime,
+    )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -131,6 +148,7 @@ def create_app(
     application.state.source_manager = source_manager
     application.state.session_controller = session_controller
     application.state.audio_runtime = audio_runtime
+    application.state.native_session_runtime = native_session_runtime
     application.state.model_registry = model_registry
     application.state.request_shutdown = None
 

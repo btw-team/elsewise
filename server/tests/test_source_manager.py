@@ -17,6 +17,7 @@ from elsewise.services.session_controller import SessionController
 from elsewise.services.sessions import SessionService
 from elsewise.services.transitions import TransitionExecutor
 from elsewise.sources.connections import BrowserConnectionRegistry
+from elsewise.sources.contracts import SourceCategory, SourceDescriptor, SourceRole
 from elsewise.sources.manager import SourceManager
 from elsewise.sources.projectors.captions import CaptionProjector
 from sqlalchemy import select
@@ -364,4 +365,69 @@ def test_source_clock_mapping_accepts_only_pre_boundary_evidence(tmp_path: Path)
         assert utterance is not None
         assert utterance.first_session_offset_us == 10
         assert utterance.last_session_offset_us == 100
+    database.dispose()
+
+
+def test_captions_are_canonical_only_when_native_role_is_unhealthy(tmp_path: Path) -> None:
+    database = database_at(tmp_path / "caption-fallback.sqlite3")
+    client_id = add_client(database)
+    sessions = SessionService(database)
+    session = sessions.create(
+        title="Caption fallback",
+        self_audio_enabled=False,
+        remote_audio_enabled=True,
+    )
+    sessions.start(session.id)
+    sources = SourceManager(database)
+    caption_source, caption_epoch = sources.discover(
+        discovered(tab="tab-fallback"), paired_client_id=client_id
+    )
+    assert caption_epoch is not None
+    _, native_epoch = sources.register_local(
+        SourceDescriptor(
+            id="00000000-0000-4000-8000-000000000088",
+            kind="native_system_audio",
+            category=SourceCategory.AUDIO,
+            platform="darwin",
+            driver_id="native_audio",
+            driver_version="1",
+            protocol_version=1,
+            capabilities=frozenset({"audio_pcm", "health"}),
+        ),
+        role=SourceRole.REMOTE,
+        target_key="default",
+        producer_epoch_id="helper-1",
+    )
+    assert native_epoch is not None
+    sources.mark_local_epoch_started(
+        native_epoch,
+        helper_instance_id="helper-1",
+        helper_protocol_version=1,
+        effective_format={"sample_rate": 16_000, "channels": 1, "format": "f32le"},
+        effective_backend="fake:model",
+    )
+    projector = CaptionProjector(database)
+
+    def caption(revision: int) -> CaptionUpsert:
+        return CaptionUpsert.model_validate(
+            {
+                "type": "caption.upsert",
+                "protocol_version": 2,
+                "event_id": str(uuid4()),
+                "source_id": caption_source,
+                "source_epoch_id": caption_epoch,
+                "client_seq": revision,
+                "utterance_id": f"caption-{revision}",
+                "revision": 1,
+                "text": "caption",
+                "session_offset_us": revision * 1_000,
+            }
+        )
+
+    assert projector.process(caption(1)) == "secondary_evidence"
+    sources.mark_local_epoch_degraded(native_epoch, error_code="asr_failed", terminal=False)
+    assert projector.process(caption(2)) == "applied"
+    with database.transaction() as db:
+        utterances = list(db.scalars(select(UtteranceRecord)))
+        assert [utterance.utterance_id for utterance in utterances] == ["caption-2"]
     database.dispose()

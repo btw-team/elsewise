@@ -21,6 +21,7 @@ from elsewise.persistence.models import (
     PairingRequestRecord,
     SessionRecord,
     SessionSourceBindingRecord,
+    SourceEpochRecord,
 )
 from elsewise.runtime.descriptor import RuntimeDescriptorStore
 from elsewise.settings.config import SettingsStore
@@ -124,7 +125,13 @@ class RuntimeStatusService:
             session = db.scalar(
                 select(SessionRecord).where(SessionRecord.recording_status == "running").limit(1)
             )
-            lane_sources: list[tuple[SessionSourceBindingRecord, CaptureSourceRecord | None]] = []
+            lane_sources: list[
+                tuple[
+                    SessionSourceBindingRecord,
+                    CaptureSourceRecord | None,
+                    SourceEpochRecord | None,
+                ]
+            ] = []
             if session is not None:
                 bindings = db.scalars(
                     select(SessionSourceBindingRecord).where(
@@ -147,6 +154,16 @@ class RuntimeStatusService:
                         db.get(CaptureSourceRecord, binding.source_id)
                         if binding.source_id is not None
                         else None,
+                        db.scalar(
+                            select(SourceEpochRecord)
+                            .where(
+                                SourceEpochRecord.binding_id == binding.id,
+                                SourceEpochRecord.state.in_(
+                                    ("starting", "running", "stopping", "failed")
+                                ),
+                            )
+                            .order_by(SourceEpochRecord.started_at.desc())
+                        ),
                     )
                     for binding in bindings
                 ]
@@ -223,6 +240,7 @@ class RuntimeStatusService:
                     "title": session.title,
                     "recording_status": session.recording_status,
                     "source_status": session.source_status,
+                    "requested_speech_profile": session.requested_speech_profile,
                 }
                 if session is not None
                 else None
@@ -239,8 +257,15 @@ class RuntimeStatusService:
                     "platform": source.platform if source else None,
                     "health_status": source.health_status if source else "unavailable",
                     "connected": source.connected if source else False,
+                    "effective_backend": epoch.effective_backend if epoch else None,
+                    "helper_instance_id": epoch.helper_instance_id if epoch else None,
+                    "received_frames": epoch.received_event_count if epoch else 0,
+                    "dropped_frames": epoch.dropped_event_count if epoch else 0,
+                    "discontinuities": epoch.discontinuity_count if epoch else 0,
+                    "xruns": epoch.xrun_count if epoch else 0,
+                    "last_error_code": epoch.last_error_code if epoch else None,
                 }
-                for binding, source in lane_sources
+                for binding, source, epoch in lane_sources
             ],
             "agent_work": {
                 "queued": run_counts.get("queued", 0),

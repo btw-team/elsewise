@@ -1,4 +1,5 @@
 import struct
+from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from elsewise.persistence.models import (
     RecordingSegmentRecord,
     SessionSourceBindingRecord,
     SourceEpochRecord,
+    UiEventRecord,
     UtteranceRecord,
     UtteranceSpeakerAssignmentRecord,
 )
@@ -146,6 +148,44 @@ async def test_speech_pipeline_projects_audio_revisions_and_topology_assignment(
         assert epoch is not None
         assert epoch.first_sequence == 0 and epoch.last_sequence == 1
         assert epoch.discontinuity_count == 1
+        events = list(
+            db.scalars(
+                select(UiEventRecord)
+                .where(UiEventRecord.event_type.like("utterance.%"))
+                .order_by(UiEventRecord.id)
+            )
+        )
+        assert len(events) == 2
+        payload = dict(events[-1].payload)
+        first_received_at = payload.pop("first_received_at")
+        last_received_at = payload.pop("last_received_at")
+        assert isinstance(first_received_at, str)
+        assert isinstance(last_received_at, str)
+        datetime.fromisoformat(first_received_at)
+        datetime.fromisoformat(last_received_at)
+        assert payload == {
+            "id": utterance.id,
+            "session_id": utterance.session_id,
+            "segment_id": utterance.segment_id,
+            "source_epoch_id": utterance.source_epoch_id,
+            "utterance_id": "speech-1",
+            "revision": 2,
+            "speaker": "You",
+            "speaker_role": "self",
+            "text": "hello",
+            "final": True,
+            "first_session_offset_us": 0,
+            "last_session_offset_us": 40_000,
+            "first_client_seq": None,
+            "last_client_seq": None,
+            "first_audio_sample_position": 0,
+            "last_audio_sample_position": 640,
+            "finalization_state": "durable_final",
+            "asr_backend": "fake",
+            "asr_model_id": "fake-deterministic",
+            "asr_model_version": "1",
+            "transcript_confidence": 0.9,
+        }
     database.dispose()
 
 

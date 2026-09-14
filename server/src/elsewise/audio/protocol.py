@@ -18,6 +18,7 @@ MAX_AUDIO_PAYLOAD_BYTES = MAX_AUDIO_FRAME_SAMPLES * 4
 _CONTROL_LENGTH = struct.Struct("<I")
 _AUDIO_HEADER = struct.Struct("<4sHH16s16sQQQII")
 _AUDIO_MAGIC = b"EWA1"
+CONTROL_HEADER_BYTES = _CONTROL_LENGTH.size
 AUDIO_HEADER_BYTES = _AUDIO_HEADER.size
 
 
@@ -140,6 +141,15 @@ def encode_control_frame(message: Mapping[str, Any]) -> bytes:
     if not payload or len(payload) > MAX_CONTROL_MESSAGE_BYTES:
         raise AudioProtocolError("control message exceeds the protocol bound")
     return _CONTROL_LENGTH.pack(len(payload)) + payload
+
+
+def control_payload_bytes_from_header(header: bytes) -> int:
+    if len(header) != CONTROL_HEADER_BYTES:
+        raise AudioProtocolError("truncated control frame header")
+    (payload_bytes,) = _CONTROL_LENGTH.unpack(header)
+    if payload_bytes == 0 or payload_bytes > MAX_CONTROL_MESSAGE_BYTES:
+        raise AudioProtocolError("control message exceeds the protocol bound")
+    return int(payload_bytes)
 
 
 def decode_control_frame(data: bytes) -> Mapping[str, Any]:

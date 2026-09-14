@@ -90,3 +90,7 @@ Desktop.ini
 
 # Local project notes
 notes/
+
+# Corpus and models
+corpus_loaded/
+models_loaded/

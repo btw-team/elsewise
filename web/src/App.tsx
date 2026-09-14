@@ -107,11 +107,16 @@ const fallbackSettings: GlobalSettings = {
   default_remote_target_key: "",
 };
 
-function formatTime(value: string, language: UiLanguage): string {
+function formatTime(
+  value: string | null | undefined,
+  language: UiLanguage,
+): string {
+  const date = new Date(value ?? "");
+  if (Number.isNaN(date.getTime())) return "";
   return new Intl.DateTimeFormat(language, {
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(date);
 }
 
 function formatSegmentTimestamp(value: string, language: UiLanguage): string {

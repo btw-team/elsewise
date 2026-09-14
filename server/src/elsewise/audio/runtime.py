@@ -5,6 +5,7 @@ from dataclasses import asdict
 from typing import Any
 
 from elsewise.audio.helper_process import AudioHelperError, AudioHelperSupervisor
+from elsewise.audio.multiplexer import AudioFrameMultiplexer
 
 
 class AudioRuntime:
@@ -12,6 +13,7 @@ class AudioRuntime:
 
     def __init__(self, helper: AudioHelperSupervisor, *, probe_ttl_seconds: float = 30.0) -> None:
         self.helper = helper
+        self.streams = AudioFrameMultiplexer(helper)
         self.probe_ttl_seconds = probe_ttl_seconds
         self._lock = asyncio.Lock()
         self._probed_at = 0.0
@@ -64,5 +66,11 @@ class AudioRuntime:
             self._probed_at = now
             return dict(snapshot)
 
+    async def source_inventory(self) -> tuple[dict[str, Any], ...]:
+        """Return the helper's bounded, display-safe capture inventory."""
+        await self.helper.start()
+        sources = await self.helper.list_sources()
+        return tuple(dict(source) for source in sources)
+
     async def close(self) -> None:
-        await self.helper.close()
+        await self.streams.close()

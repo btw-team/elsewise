@@ -13,6 +13,7 @@ from elsewise.persistence.models import (
     CaptionEventTombstoneRecord,
     CaptureSourceRecord,
     SessionRecord,
+    SessionSourceBindingRecord,
     SourceEpochRecord,
     UtteranceRecord,
     UtteranceSpeakerAssignmentRecord,
@@ -82,6 +83,12 @@ class CaptionProjector:
                 result, reason = "rejected", "after_stop_boundary"
             elif epoch.state not in {"starting", "running", "stopping"}:
                 result, reason = "source_not_bound", "epoch_not_running"
+            elif session is not None and self._native_primary_healthy(
+                db,
+                session.id,
+                self._caption_role(message.speaker, source.platform if source else "synthetic"),
+            ):
+                result, reason = "secondary_evidence", "native_primary_healthy"
 
             existing = db.scalar(
                 select(UtteranceRecord).where(
@@ -230,6 +237,46 @@ class CaptionProjector:
                 log_event("caption.processed", source_id=source_id, result=result, reason=reason)
             return result
 
+    def _caption_role(self, label: str | None, platform: str) -> str:
+        classified = (
+            classify_speaker(label, platform, own_speaker_names(self.settings.load()))
+            if self.settings is not None
+            else "unknown"
+        )
+        return "self" if classified == "self" else "remote"
+
+    @staticmethod
+    def _native_primary_healthy(db: Session, session_id: str, role: str) -> bool:
+        binding = db.scalar(
+            select(SessionSourceBindingRecord).where(
+                SessionSourceBindingRecord.session_id == session_id,
+                SessionSourceBindingRecord.role == role,
+                SessionSourceBindingRecord.state == "active",
+                SessionSourceBindingRecord.effective_mode == "native",
+            )
+        )
+        if binding is None or binding.source_id is None:
+            return False
+        source = db.get(CaptureSourceRecord, binding.source_id)
+        if (
+            source is None
+            or source.driver_id != "native_audio"
+            or not source.connected
+            or not source.available
+        ):
+            return False
+        native_epoch = db.scalar(
+            select(SourceEpochRecord)
+            .where(
+                SourceEpochRecord.binding_id == binding.id,
+                SourceEpochRecord.state == "running",
+                SourceEpochRecord.effective_backend.is_not(None),
+                SourceEpochRecord.last_health_status == "available",
+            )
+            .order_by(SourceEpochRecord.started_at.desc())
+        )
+        return native_epoch is not None
+
     def _upsert_speaker_assignment(
         self,
         db: Session,
@@ -294,4 +341,11 @@ class CaptionProjector:
             "last_received_at": record.last_received_at.isoformat(),
             "first_client_seq": record.first_client_seq,
             "last_client_seq": record.last_client_seq,
+            "first_audio_sample_position": record.first_audio_sample_position,
+            "last_audio_sample_position": record.last_audio_sample_position,
+            "finalization_state": record.finalization_state,
+            "asr_backend": record.asr_backend,
+            "asr_model_id": record.asr_model_id,
+            "asr_model_version": record.asr_model_version,
+            "transcript_confidence": record.transcript_confidence,
         }

@@ -36,6 +36,24 @@ function upsert<T>(
   return next;
 }
 
+function compareUtterances(left: Utterance, right: Utterance): number {
+  const offset = left.first_session_offset_us - right.first_session_offset_us;
+  if (offset !== 0) return offset;
+  const clientSequence =
+    (left.first_client_seq ?? -1) - (right.first_client_seq ?? -1);
+  if (clientSequence !== 0) return clientSequence;
+  return left.id.localeCompare(right.id);
+}
+
+function upsertUtterance(
+  items: Utterance[],
+  utterance: Utterance,
+): Utterance[] {
+  return upsert(items, utterance.id, utterance, (item) => item.id).sort(
+    compareUtterances,
+  );
+}
+
 function applyGlobalEvent(
   snapshot: GlobalSnapshot,
   event: UiEvent,
@@ -142,12 +160,7 @@ function applyDetailEvent(
       ...detail,
       utterances: {
         ...detail.utterances,
-        items: upsert(
-          detail.utterances.items,
-          utterance.id,
-          utterance,
-          (item) => item.id,
-        ),
+        items: upsertUtterance(detail.utterances.items, utterance),
       },
       last_event_id: event.event_id,
     };
@@ -318,7 +331,9 @@ export function useLiveSnapshot(selectedId: string | null): {
             ...value,
             utterances: {
               ...page,
-              items: [...page.items, ...value.utterances.items],
+              items: [...page.items, ...value.utterances.items].sort(
+                compareUtterances,
+              ),
             },
           }
         : value,

@@ -336,8 +336,11 @@ def test_one_running_session_and_restart_segments(tmp_path: Path) -> None:
     assert "another_session_running" in results
 
     running_id = next(result for result in results if result in (first.id, second.id))
+    first_origin = SessionService(database).get(running_id).monotonic_origin_ns
+    assert first_origin is not None
     service.stop(running_id, now=NOW)
     service.start(running_id, now=NOW)
+    assert SessionService(database).get(running_id).monotonic_origin_ns == first_origin
     with database.transaction() as db:
         segments = list(
             db.scalars(

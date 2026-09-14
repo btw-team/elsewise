@@ -1,4 +1,4 @@
-import { FormEvent, useRef, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 
 import { api, ApiError } from "../api/client";
 import { apiErrorMessage } from "../api/errors";
@@ -16,6 +16,7 @@ import {
 import type {
   ActionPreset,
   AgentProviderHealth,
+  AudioSourceCandidate,
   GlobalSettings,
   SessionSummary,
   SupportedLanguage,
@@ -126,6 +127,9 @@ export function SessionDrawer({
   const [missingDirectory, setMissingDirectory] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [remoteTargets, setRemoteTargets] = useState<AudioSourceCandidate[]>(
+    [],
+  );
   const dialog = useModalFocus(onClose, busy);
   const [confirmPermissions, setConfirmPermissions] = useState(false);
   const cwdInput = useRef<HTMLInputElement>(null);
@@ -150,6 +154,31 @@ export function SessionDrawer({
     : null;
   const prestartLockReason = temporarilyLockedReason ?? permanentlyLockedReason;
   const prestartFieldsDisabled = Boolean(prestartLockReason);
+
+  useEffect(() => {
+    if (prestartFieldsDisabled) return;
+    let current = true;
+    void api
+      .audioSources()
+      .then((inventory) => {
+        if (!current) return;
+        setRemoteTargets(
+          inventory.items.filter(
+            (source) =>
+              source.available &&
+              (source.source_kind === "native_system_audio" ||
+                (source.source_kind === "native_process_audio" &&
+                  source.active)),
+          ),
+        );
+      })
+      .catch(() => {
+        if (current) setRemoteTargets([]);
+      });
+    return () => {
+      current = false;
+    };
+  }, [prestartFieldsDisabled]);
 
   async function persist(createAgentCwd: boolean) {
     if (sessionRunning) return;
@@ -419,9 +448,8 @@ export function SessionDrawer({
                 <FieldLabel lockReason={prestartLockReason}>
                   {t("remoteTarget")}
                 </FieldLabel>
-                <input
+                <select
                   disabled={prestartFieldsDisabled || !draft.remoteAudioEnabled}
-                  maxLength={256}
                   value={draft.remoteTargetKey}
                   onChange={(event) =>
                     setDraft((current) => ({
@@ -429,7 +457,22 @@ export function SessionDrawer({
                       remoteTargetKey: event.target.value,
                     }))
                   }
-                />
+                >
+                  <option value="">{t("remoteTargetDefault")}</option>
+                  {draft.remoteTargetKey &&
+                  !remoteTargets.some(
+                    (source) => source.target_key === draft.remoteTargetKey,
+                  ) ? (
+                    <option value={draft.remoteTargetKey}>
+                      {draft.remoteTargetKey}
+                    </option>
+                  ) : null}
+                  {remoteTargets.map((source) => (
+                    <option key={source.target_key} value={source.target_key}>
+                      {source.display_name}
+                    </option>
+                  ))}
+                </select>
               </label>
               <label>
                 <FieldLabel

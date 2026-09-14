@@ -148,11 +148,17 @@ class SpeechProjector:
                     "final": record.final,
                     "first_session_offset_us": record.first_session_offset_us,
                     "last_session_offset_us": record.last_session_offset_us,
+                    "first_received_at": record.first_received_at.isoformat(),
+                    "last_received_at": record.last_received_at.isoformat(),
                     "first_client_seq": None,
                     "last_client_seq": None,
                     "first_audio_sample_position": record.first_audio_sample_position,
                     "last_audio_sample_position": record.last_audio_sample_position,
                     "finalization_state": record.finalization_state,
+                    "asr_backend": record.asr_backend,
+                    "asr_model_id": record.asr_model_id,
+                    "asr_model_version": record.asr_model_version,
+                    "transcript_confidence": record.transcript_confidence,
                 },
             )
             return "applied"

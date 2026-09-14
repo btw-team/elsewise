@@ -46,6 +46,7 @@ from elsewise.api.serialization import (
     ui_event_payload,
     utterance_payload,
 )
+from elsewise.audio.helper_process import AudioHelperError
 from elsewise.audio.runtime import AudioRuntime
 from elsewise.exports import ExportService
 from elsewise.observability import RuntimeDiagnostics
@@ -129,6 +130,19 @@ async def runtime_status(request: Request) -> dict[str, Any]:
 async def audio_capabilities(request: Request, refresh: bool = False) -> dict[str, Any]:
     runtime = cast(AudioRuntime, request.app.state.audio_runtime)
     return await runtime.snapshot(refresh=refresh)
+
+
+@router.get("/audio/sources")
+async def audio_sources(request: Request) -> dict[str, Any]:
+    runtime = cast(AudioRuntime, request.app.state.audio_runtime)
+    try:
+        return {
+            "status": "ready",
+            "error_code": None,
+            "items": list(await runtime.source_inventory()),
+        }
+    except (AudioHelperError, OSError):
+        return {"status": "unavailable", "error_code": "helper_unavailable", "items": []}
 
 
 @router.get("/speech/models")

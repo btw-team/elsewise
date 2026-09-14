@@ -4,10 +4,12 @@ from uuid import UUID
 import pytest
 from elsewise.audio.protocol import (
     AUDIO_PROTOCOL_VERSION,
+    CONTROL_HEADER_BYTES,
     MAX_AUDIO_FRAME_SAMPLES,
     AudioFrame,
     AudioFrameFlags,
     AudioProtocolError,
+    control_payload_bytes_from_header,
     decode_audio_frame,
     decode_control_frame,
     encode_audio_frame,
@@ -77,3 +79,10 @@ def test_control_frame_is_bounded_versioned_and_immutable() -> None:
     )
     with pytest.raises(AudioProtocolError, match="version"):
         decode_control_frame(incompatible)
+
+
+def test_control_header_rejects_oversized_payload_before_reading_it() -> None:
+    assert CONTROL_HEADER_BYTES == 4
+    oversized = struct.pack("<I", 64 * 1024 + 1)
+    with pytest.raises(AudioProtocolError, match="bound"):
+        control_payload_bytes_from_header(oversized)

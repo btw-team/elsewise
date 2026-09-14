@@ -28,5 +28,63 @@
     "discontinuity": 1,
     "xrun": 2,
     "end_of_stream": 4
+  },
+  "transport": {
+    "unix": {
+      "control": "length-prefixed JSON on a user-private Unix domain socket",
+      "data": "binary audio frames on a separate user-private Unix domain socket"
+    },
+    "windows": "named-pipe transport is deferred to release expansion"
+  },
+  "control_messages": {
+    "handshake": ["helper.hello", "daemon.hello", "helper.ready"],
+    "lifecycle": [
+      "source.start",
+      "source.started",
+      "source.stop",
+      "source.stopped"
+    ],
+    "operations": [
+      "source.list",
+      "source.list_result",
+      "source.health",
+      "source.health_result",
+      "helper.health",
+      "helper.health_result",
+      "helper.shutdown",
+      "helper.shutdown_ack"
+    ],
+    "errors": ["protocol.error"]
+  },
+  "source_kinds": {
+    "synthetic_audio": {
+      "target_key": "synthetic:sine-440hz",
+      "start_fields": ["source_id", "epoch_id", "frame_count"]
+    },
+    "native_microphone": {
+      "target_key": "default or an opaque CPAL device ID",
+      "start_fields": ["source_id", "epoch_id", "target_key"]
+    },
+    "native_process_audio": {
+      "platform": "macos 14.6+",
+      "target_key": "bundle:<bundle-id> or pid:<pid>",
+      "start_fields": ["source_id", "epoch_id", "target_key"]
+    },
+    "native_system_audio": {
+      "platform": "macos 14.6+ in the current implementation",
+      "target_key": "default or an opaque CPAL output device ID",
+      "start_fields": ["source_id", "epoch_id", "target_key"]
+    }
+  },
+  "source_descriptor": {
+    "fields": [
+      "source_kind",
+      "target_key",
+      "display_name",
+      "available",
+      "is_default",
+      "active"
+    ],
+    "notes": "active is meaningful for process audio; target_key is opaque to the daemon"
   }
 }

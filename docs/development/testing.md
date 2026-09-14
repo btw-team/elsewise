@@ -37,6 +37,70 @@ names, organizations, URLs, tokens, emails, meeting IDs, avatars, captions from 
 conversations, and unrelated page markup. A fixture README should state the behavior
 it preserves.
 
+## Native audio and speech model smoke
+
+Build the Rust helper before running the transport integration tests:
+
+```bash
+cargo build --workspace
+uv run pytest server/tests/test_audio_helper.py server/tests/test_audio_multiplexer.py -m integration
+```
+
+The helper uses separate user-private control and PCM Unix sockets on macOS/Linux.
+Its integration suite covers two simultaneous streams, idempotent lifecycle commands,
+bounded backpressure, explicit per-lane overflow, and restart after a process crash.
+
+On macOS 14.6 or newer, list the discovered microphone, process, and system-audio
+targets and run a bounded RAM-only capture smoke with:
+
+```bash
+cargo build --workspace
+uv run python scripts/smoke-native-audio.py list --helper target/debug/elsewise-audio
+uv run python scripts/smoke-native-audio.py microphone --helper target/debug/elsewise-audio
+uv run python scripts/smoke-native-audio.py system --helper target/debug/elsewise-audio
+uv run python scripts/smoke-native-audio.py process \
+  --target bundle:com.example.MeetingApp \
+  --helper target/debug/elsewise-audio
+```
+
+The process smoke chooses the first actively producing Core Audio process when
+`--target` is omitted. These commands print only counters and signal level; they do
+not persist PCM. macOS may request Microphone or System Audio Recording permission.
+
+After the helper and development models are available, exercise the complete Session
+lifecycle (default microphone + default system audio → Silero/Whisper → bounded Stop)
+with:
+
+```bash
+uv run python scripts/smoke-native-session.py --seconds 10 --language en
+```
+
+Use `--remote-target bundle:<bundle-id>` to select a discovered process tap. The JSON
+result contains only aggregate lane counters and an utterance count; it never emits or
+persists PCM or transcript text.
+
+After `uv run python scripts/build-frozen.py`, repeat the same source harness against
+the unsigned Intel macOS bundle executables:
+
+```bash
+uv run python scripts/smoke-native-session.py --seconds 10 --language en \
+  --helper dist/frozen/Elsewise/_internal/elsewise/bin/elsewise-audio \
+  --speech-worker dist/frozen/Elsewise/elsewise-speech-worker
+```
+
+Downloaded models live in the ignored `models_loaded/` development inventory. Run each
+model smoke in its own process so load time and peak RSS remain attributable:
+
+```bash
+uv run python scripts/smoke-speech-models.py whisper
+```
+
+Valid model names are `silero`, `whisper`, `nemotron`, `parakeet`, `campplus`, and
+`pyannote`. The command prints one JSON evidence record; `--wav`, `--language`, and
+`--threads` make corpus and hardware comparisons explicit. The sherpa runtime and its
+native core are pinned in the project lock; downloaded model files remain a local,
+ignored development inventory until production manifests are approved.
+
 ## Live tests
 
 Paid provider tests remain opt-in:

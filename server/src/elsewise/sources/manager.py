@@ -127,6 +127,84 @@ class SourceManager:
             emit_ui_event(db, "source.changed", source.id, self._source_payload(db, source, epoch))
             return source.id, epoch.id if epoch else None
 
+    def mark_local_epoch_started(
+        self,
+        epoch_id: str,
+        *,
+        helper_instance_id: str | None,
+        helper_protocol_version: int,
+        effective_format: dict[str, object],
+        effective_backend: str,
+    ) -> None:
+        with self.database.transaction() as db:
+            epoch = db.get(SourceEpochRecord, epoch_id)
+            if epoch is None:
+                return
+            epoch.state = "running"
+            epoch.helper_instance_id = helper_instance_id
+            epoch.helper_protocol_version = helper_protocol_version
+            epoch.effective_format = effective_format
+            epoch.effective_backend = effective_backend
+            epoch.last_health_status = "available"
+            epoch.last_error_code = None
+            binding = db.get(SessionSourceBindingRecord, epoch.binding_id)
+            if binding is not None:
+                binding.state = "active"
+                binding.reason = None
+            session = db.get(SessionRecord, epoch.session_id)
+            if session is not None:
+                self._refresh_session_source_status(db, session)
+                emit_ui_event(db, "session.state", session.id, self._session_payload(db, session))
+
+    def mark_local_epoch_degraded(self, epoch_id: str, *, error_code: str, terminal: bool) -> None:
+        with self.database.transaction() as db:
+            epoch = db.get(SourceEpochRecord, epoch_id)
+            if epoch is None:
+                return
+            if terminal:
+                epoch.state = "failed"
+                epoch.ended_at = utc_now()
+                epoch.end_reason = error_code
+            epoch.last_health_status = "degraded"
+            epoch.last_error_code = error_code
+            binding = db.get(SessionSourceBindingRecord, epoch.binding_id)
+            if binding is not None:
+                binding.state = "degraded"
+                binding.reason = error_code
+            session = db.get(SessionRecord, epoch.session_id)
+            if session is not None:
+                self._refresh_session_source_status(db, session)
+                emit_ui_event(db, "session.state", session.id, self._session_payload(db, session))
+
+    def update_local_epoch_metrics(self, epoch_id: str, metrics: dict[str, int]) -> None:
+        with self.database.transaction() as db:
+            epoch = db.get(SourceEpochRecord, epoch_id)
+            if epoch is None:
+                return
+            dropped = max(0, metrics.get("dropped_callback_blocks", 0)) + max(
+                0, metrics.get("backpressure_count", 0)
+            )
+            xruns = max(0, metrics.get("xruns", 0))
+            route_changes = max(0, metrics.get("route_changes", 0))
+            capture_errors = max(0, metrics.get("capture_errors", 0))
+            epoch.dropped_event_count = max(epoch.dropped_event_count, dropped)
+            epoch.xrun_count = max(epoch.xrun_count, xruns)
+            epoch.discontinuity_count = max(
+                epoch.discontinuity_count,
+                dropped + xruns + route_changes + capture_errors,
+            )
+            epoch.last_seen_at = utc_now()
+            if capture_errors:
+                epoch.last_health_status = "degraded"
+                epoch.last_error_code = "device_changed" if route_changes else "capture_failed"
+                binding = db.get(SessionSourceBindingRecord, epoch.binding_id)
+                if binding is not None:
+                    binding.state = "degraded"
+                    binding.reason = epoch.last_error_code
+                session = db.get(SessionRecord, epoch.session_id)
+                if session is not None:
+                    self._refresh_session_source_status(db, session)
+
     def discover(
         self, message: SourceDiscovered, *, paired_client_id: str
     ) -> tuple[str, str | None]:

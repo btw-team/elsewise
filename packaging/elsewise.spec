@@ -3,7 +3,7 @@ import sys
 import tomllib
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 
 ROOT = Path(SPECPATH).resolve().parent
@@ -26,6 +26,7 @@ common_datas = [
     (str(MIGRATIONS), "elsewise/migrations"),
     (str(ROOT / "protocol" / "schemas"), "elsewise/protocol/schema_files"),
     (str(ROOT / "protocol" / "audio"), "elsewise/protocol/audio_files"),
+    (str(ROOT / "protocol" / "speech"), "elsewise/protocol/speech_files"),
     (str(ASSETS / "elsewise-logo-dark.png"), "elsewise/assets"),
     (str(ASSETS / "elsewise-logo-light.png"), "elsewise/assets"),
     (str(ASSETS / "white-bunny-avatar.png"), "elsewise/assets"),
@@ -37,10 +38,14 @@ common_datas = [
     (str(ROOT / "THIRD_PARTY_NOTICES.md"), "."),
 ]
 common_datas += collect_data_files("customtkinter")
+common_datas += collect_data_files("sherpa_onnx")
+common_binaries = [(str(HELPER), "elsewise/bin")] + collect_dynamic_libs("sherpa_onnx")
 hiddenimports = (
     collect_submodules("uvicorn")
     + collect_submodules("websockets")
     + collect_submodules("elsewise.services")
+    + collect_submodules("sherpa_onnx")
+    + collect_submodules("numpy")
     + ["PIL._tkinter_finder"]
 )
 
@@ -49,7 +54,7 @@ def analysis(script):
     return Analysis(
         [str(script)],
         pathex=[str(ROOT / "server" / "src")],
-        binaries=[(str(HELPER), "elsewise/bin")],
+        binaries=common_binaries,
         datas=common_datas,
         hiddenimports=hiddenimports,
         hookspath=[],
@@ -64,11 +69,13 @@ def analysis(script):
 gui_analysis = analysis(ROOT / "server/src/elsewise/launcher/app.py")
 cli_analysis = analysis(ROOT / "server/src/elsewise/cli.py")
 server_analysis = analysis(ROOT / "server/src/elsewise/runtime/server_runner.py")
+speech_worker_analysis = analysis(ROOT / "server/src/elsewise/speech/worker_process.py")
 
 MERGE(
     (gui_analysis, "elsewise-gui", "elsewise-gui"),
     (cli_analysis, "elsewise", "elsewise"),
     (server_analysis, "elsewise-server", "elsewise-server"),
+    (speech_worker_analysis, "elsewise-speech-worker", "elsewise-speech-worker"),
 )
 
 gui_icon = None
@@ -102,17 +109,23 @@ def executable(source, name, *, console):
 gui_exe = executable(gui_analysis, "elsewise-gui", console=False)
 cli_exe = executable(cli_analysis, "elsewise", console=True)
 server_exe = executable(server_analysis, "elsewise-server", console=False)
+speech_worker_exe = executable(
+    speech_worker_analysis, "elsewise-speech-worker", console=False
+)
 
 collection = COLLECT(
     gui_exe,
     cli_exe,
     server_exe,
+    speech_worker_exe,
     gui_analysis.binaries,
     gui_analysis.datas,
     cli_analysis.binaries,
     cli_analysis.datas,
     server_analysis.binaries,
     server_analysis.datas,
+    speech_worker_analysis.binaries,
+    speech_worker_analysis.datas,
     strip=False,
     upx=False,
     name="Elsewise",

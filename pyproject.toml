@@ -24,12 +24,15 @@ dependencies = [
   "customtkinter>=5.2,<6",
   "fastapi>=0.116,<1",
   "jsonschema>=4.25,<5",
+  "numpy>=2.1,<3",
   "packaging>=24,<27",
   "platformdirs>=4.3,<5",
   "pillow>=11.3,<13",
   "psutil>=7.0,<8",
   "pydantic>=2.11,<3",
   "sqlalchemy>=2.0,<3",
+  "sherpa-onnx==1.13.3",
+  "sherpa-onnx-core==1.13.3",
   "uvicorn[standard]>=0.35,<1",
 ]
 
@@ -67,6 +70,7 @@ packages = ["server/src/elsewise"]
 "web/dist" = "elsewise/web_dist"
 "protocol/schemas" = "elsewise/protocol/schema_files"
 "protocol/audio" = "elsewise/protocol/audio_files"
+"protocol/speech" = "elsewise/protocol/speech_files"
 "web/src/assets/elsewise-logo-dark.png" = "elsewise/assets/elsewise-logo-dark.png"
 "web/src/assets/elsewise-logo-light.png" = "elsewise/assets/elsewise-logo-light.png"
 "shared/theme-tokens.json" = "elsewise/assets/theme-tokens.json"

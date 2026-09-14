@@ -12,6 +12,7 @@ import type {
   Page,
   AgentHistoryPage,
   Utterance,
+  AudioSourceInventory,
 } from "../types";
 
 export class ApiError extends Error {
@@ -49,6 +50,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   snapshot: () => request<GlobalSnapshot>("/api/snapshot"),
+  audioSources: () => request<AudioSourceInventory>("/api/audio/sources"),
   createSession: (body: {
     title: string;
     description: string;

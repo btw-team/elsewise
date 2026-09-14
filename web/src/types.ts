@@ -109,6 +109,25 @@ export interface CaptureSource {
   tab_ordinal?: number | null;
 }
 
+export interface AudioSourceCandidate {
+  source_kind:
+    | "synthetic_audio"
+    | "native_microphone"
+    | "native_process_audio"
+    | "native_system_audio";
+  target_key: string;
+  display_name: string;
+  available: boolean;
+  is_default: boolean;
+  active?: boolean;
+}
+
+export interface AudioSourceInventory {
+  status: "ready" | "unavailable";
+  error_code: string | null;
+  items: AudioSourceCandidate[];
+}
+
 export interface SessionSourceBinding {
   id: string;
   session_id: string;
