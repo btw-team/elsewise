@@ -19,6 +19,8 @@ use cpal::{
     StreamConfig,
 };
 
+#[cfg(target_os = "linux")]
+mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
 
@@ -80,14 +82,17 @@ pub struct NativeCapture {
     metrics: Arc<AtomicCaptureMetrics>,
     channels: usize,
     sample_rate: u32,
+    stopped: bool,
     #[cfg(target_os = "macos")]
     _process_tap: Option<macos::ProcessTapLease>,
 }
 
 enum NativeStreamHandle {
-    Cpal(Stream),
+    Cpal(Option<Stream>),
     #[cfg(target_os = "macos")]
     CoreAudio(AudioUnit),
+    #[cfg(target_os = "linux")]
+    LinuxRecorder(linux::LinuxRecorder),
 }
 
 impl NativeCapture {
@@ -103,6 +108,7 @@ impl NativeCapture {
         match self.filled_rx.try_recv() {
             Ok(block) => Ok(Some(block)),
             Err(TryRecvError::Empty) => Ok(None),
+            Err(TryRecvError::Disconnected) if self.stopped => Ok(None),
             Err(TryRecvError::Disconnected) => {
                 Err("native capture callback disconnected".to_owned())
             }
@@ -114,14 +120,37 @@ impl NativeCapture {
         let _ = self.free_tx.try_send(block.samples);
     }
 
-    pub fn pause(&mut self) -> Result<(), String> {
+    pub fn stop(&mut self) -> Result<(), String> {
+        if self.stopped {
+            return Ok(());
+        }
         match &mut self.stream {
-            NativeStreamHandle::Cpal(stream) => stream.pause().map_err(capture_error),
+            // ALSA streams do not necessarily implement pause. Dropping the CPAL
+            // stream is the portable stop operation and also disconnects its
+            // callback after already queued blocks have been drained.
+            NativeStreamHandle::Cpal(stream) => {
+                #[cfg(target_os = "linux")]
+                {
+                    stream.take();
+                    Ok(())
+                }
+                #[cfg(not(target_os = "linux"))]
+                {
+                    match stream.as_mut() {
+                        Some(stream) => stream.pause().map_err(capture_error),
+                        None => Ok(()),
+                    }
+                }
+            }
             #[cfg(target_os = "macos")]
             NativeStreamHandle::CoreAudio(stream) => {
                 stream.stop().map_err(|error| error.to_string())
             }
-        }
+            #[cfg(target_os = "linux")]
+            NativeStreamHandle::LinuxRecorder(recorder) => recorder.stop(),
+        }?;
+        self.stopped = true;
+        Ok(())
     }
 
     pub fn metrics(&self) -> CaptureMetrics {
@@ -140,6 +169,7 @@ pub fn discover_sources() -> Result<Vec<CaptureSourceDescriptor>, String> {
         .default_input_device()
         .and_then(|device| device.id().ok())
         .map(|id| id.to_string());
+    #[cfg(target_os = "macos")]
     let default_output_id = host
         .default_output_device()
         .and_then(|device| device.id().ok())
@@ -180,6 +210,9 @@ pub fn discover_sources() -> Result<Vec<CaptureSourceDescriptor>, String> {
         }
     }
 
+    #[cfg(target_os = "linux")]
+    sources.extend(linux::discover_sources()?);
+
     sources.sort_by(|left, right| {
         left.source_kind
             .protocol_name()
@@ -199,8 +232,12 @@ pub fn start_capture(
     if source_kind == CaptureSourceKind::ProcessAudio {
         return start_process_capture(target_key, helper_started);
     }
-    let device = select_device(source_kind, target_key)?;
-    #[cfg(not(target_os = "macos"))]
+
+    #[cfg(target_os = "linux")]
+    if source_kind != CaptureSourceKind::Microphone {
+        return linux::start_capture(source_kind, target_key, helper_started);
+    }
+
     let device = select_device(source_kind, target_key)?;
     let supported_config = match source_kind {
         CaptureSourceKind::Microphone => device.default_input_config(),
@@ -252,12 +289,13 @@ pub fn start_capture(
     stream.play().map_err(capture_error)?;
 
     Ok(NativeCapture {
-        stream: NativeStreamHandle::Cpal(stream),
+        stream: NativeStreamHandle::Cpal(Some(stream)),
         filled_rx,
         free_tx,
         metrics,
         channels,
         sample_rate,
+        stopped: false,
         #[cfg(target_os = "macos")]
         _process_tap: None,
     })
@@ -325,6 +363,7 @@ fn start_process_capture(
         metrics,
         channels,
         sample_rate,
+        stopped: false,
         _process_tap: Some(process_tap),
     })
 }

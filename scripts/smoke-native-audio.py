@@ -46,7 +46,7 @@ async def capture(args: argparse.Namespace, helper: AudioHelperSupervisor) -> di
             None,
         )
         if target is None:
-            raise RuntimeError("no active Core Audio process target is available")
+            raise RuntimeError("no active process-audio target is available")
     target = target or "default"
     source_id = uuid4()
     epoch_id = uuid4()

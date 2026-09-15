@@ -79,7 +79,16 @@ fn capabilities() -> &'static [&'static str] {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        &["synthetic_audio", "multi_stream", "unix_socket_ipc"]
+        &[
+            "synthetic_audio",
+            "multi_stream",
+            "unix_socket_ipc",
+            "native_microphone",
+            "native_process_audio",
+            "native_system_audio",
+            "pipewire_capture",
+            "pulseaudio_fallback",
+        ]
     }
 }
 
@@ -122,6 +131,10 @@ mod unix {
     use uuid::Uuid;
 
     const FRAME_SAMPLES: u32 = 320;
+    #[cfg(target_os = "linux")]
+    const NATIVE_FRAMES_PER_SECOND: usize = 5;
+    #[cfg(not(target_os = "linux"))]
+    const NATIVE_FRAMES_PER_SECOND: usize = 50;
     const MAX_SYNTHETIC_FRAMES: u64 = 100_000;
     const DATA_QUEUE_FRAMES: usize = 128;
     const IDEMPOTENCY_CACHE_SIZE: usize = 256;
@@ -154,6 +167,7 @@ mod unix {
         native_samples: VecDeque<f32>,
         native_samples_per_frame: usize,
         next_sequence: u64,
+        next_sample_position: u64,
         stopping: bool,
         pending_frame: Option<Vec<u8>>,
         pending_frame_is_end: bool,
@@ -196,7 +210,7 @@ mod unix {
                 Self::Synthetic(stream) => stream.stopping = true,
                 Self::Native(stream) => {
                     if !stream.stopping {
-                        stream.capture.pause()?;
+                        stream.capture.stop()?;
                         stream.stopping = true;
                     }
                 }
@@ -646,18 +660,11 @@ mod unix {
                     Some("native_process_audio") => CaptureSourceKind::ProcessAudio,
                     _ => CaptureSourceKind::SystemAudio,
                 };
-                #[cfg(not(target_os = "macos"))]
-                if source_kind != CaptureSourceKind::Microphone {
-                    return Err((
-                        "unsupported_source_kind".to_owned(),
-                        "remote native audio is currently enabled only on macOS".to_owned(),
-                    ));
-                }
                 let target_key = message["target_key"].as_str().unwrap_or("default");
                 let capture = start_capture(source_kind, target_key, helper_started)
                     .map_err(|detail| ("capture_start_failed".to_owned(), detail))?;
                 let native_samples_per_frame =
-                    capture.sample_rate() as usize / 50 * capture.channels();
+                    capture.sample_rate() as usize / NATIVE_FRAMES_PER_SECOND * capture.channels();
                 Ok(ActiveStream::Native(Box::new(NativeStream {
                     source_id,
                     epoch_id,
@@ -665,6 +672,7 @@ mod unix {
                     native_samples: VecDeque::with_capacity(native_samples_per_frame * 2),
                     native_samples_per_frame,
                     next_sequence: 0,
+                    next_sample_position: 0,
                     stopping: false,
                     pending_frame: None,
                     pending_frame_is_end: false,
@@ -835,18 +843,22 @@ mod unix {
         flags |= u16::from(is_end) << 2;
         stream.pending_discontinuity = false;
         stream.pending_xrun = false;
+        let frame_samples = u32::try_from(pcm.len()).map_err(|_| "audio frame is too large")?;
         let frame = AudioFrame {
             source_id: stream.source_id,
             epoch_id: stream.epoch_id,
             sequence: stream.next_sequence,
-            source_sample_position: stream.next_sequence * u64::from(FRAME_SAMPLES),
+            source_sample_position: stream.next_sample_position,
             host_monotonic_ns: stream
                 .stream_started_ns
-                .saturating_add(stream.next_sequence.saturating_mul(20_000_000)),
-            frame_samples: u32::try_from(pcm.len()).map_err(|_| "audio frame is too large")?,
+                .saturating_add(stream.next_sample_position.saturating_mul(62_500)),
+            frame_samples,
             flags,
             pcm,
         };
+        stream.next_sample_position = stream
+            .next_sample_position
+            .saturating_add(u64::from(frame_samples));
         stream.pending_frame = Some(frame.encode().map_err(str::to_owned)?);
         stream.pending_frame_is_end = is_end;
         Ok(())

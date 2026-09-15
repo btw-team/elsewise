@@ -26,6 +26,7 @@ MAX_STREAMS = 8
 MAX_CACHE_ENTRIES = 256
 MAX_FRAME_SAMPLES = 3_200
 MAX_PENDING_RECOGNITIONS_PER_STREAM = 4
+LINUX_BACKGROUND_NICE = 10
 
 
 class WorkerFailure(RuntimeError):
@@ -108,7 +109,7 @@ class SherpaOnnxStream:
 
         audio = self.numpy.frombuffer(pcm, dtype="<f4")
         self.vad.accept_waveform(audio)
-        self._schedule_segments()
+        events.extend(self._schedule_segments())
         events.extend(self._collect_recognitions(block=False))
         self.expected_sequence = sequence + 1
         self.expected_sample_position = sample_position + frame_samples
@@ -118,8 +119,8 @@ class SherpaOnnxStream:
 
     def flush(self) -> list[dict[str, Any]]:
         self.vad.flush()
-        self._schedule_segments()
-        events = self._collect_recognitions(block=True)
+        events = self._schedule_segments()
+        events.extend(self._collect_recognitions(block=True))
         self.vad = self._new_vad()
         if self.expected_sample_position is not None:
             self.vad_origin = self.expected_sample_position
@@ -135,10 +136,14 @@ class SherpaOnnxStream:
         config.num_threads = self.threads
         return self.sherpa.VoiceActivityDetector(config, buffer_size_in_seconds=60)
 
-    def _schedule_segments(self) -> None:
+    def _schedule_segments(self) -> list[dict[str, Any]]:
+        events: list[dict[str, Any]] = []
         while not self.vad.empty():
             if len(self.pending) >= MAX_PENDING_RECOGNITIONS_PER_STREAM:
-                raise WorkerFailure("asr_overloaded", "speech recognition queue is full")
+                # Apply bounded backpressure instead of terminating the stream on a
+                # short speech burst. The daemon-side frame queue remains the outer
+                # hard bound and will surface sustained overload.
+                events.extend(self._collect_recognitions(block=True, maximum=1))
             segment = self.vad.front
             samples = self.numpy.ascontiguousarray(segment.samples, dtype=self.numpy.float32)
             first_sample = self.vad_origin + int(segment.start)
@@ -150,11 +155,20 @@ class SherpaOnnxStream:
                     first_sample + len(samples),
                 )
             )
+        return events
 
-    def _collect_recognitions(self, *, block: bool) -> list[dict[str, Any]]:
+    def _collect_recognitions(
+        self, *, block: bool, maximum: int | None = None
+    ) -> list[dict[str, Any]]:
         events: list[dict[str, Any]] = []
-        while self.pending and (block or self.pending[0][0].done()):
+        collected = 0
+        while (
+            self.pending
+            and (maximum is None or collected < maximum)
+            and (block or self.pending[0][0].done())
+        ):
             future, first_sample, last_sample = self.pending.pop(0)
+            collected += 1
             hypotheses = tuple(
                 hypothesis for hypothesis in future.result() if hypothesis.text.strip()
             )
@@ -177,6 +191,10 @@ class SherpaOnnxStream:
         return events
 
     def _recognize(self, samples: Any) -> tuple[RecognitionHypothesis, ...]:
+        # system76-scheduler can reclassify the Python process after startup.
+        # Reapply the background priority on the executor thread that performs
+        # the expensive native decode so interactive audio/video keeps CPU time.
+        configure_worker_priority()
         if self.profile == "conservative":
             text = self._recognize_offline(self.recognizer, samples)
             return (RecognitionHypothesis(text, True),) if text else ()
@@ -544,6 +562,19 @@ def validate_socket_path(socket_path: Path) -> None:
         raise WorkerFailure("invalid_socket", "speech worker socket parent is not private")
 
 
+def configure_worker_priority() -> int | None:
+    """Yield CPU to interactive audio/video clients during Linux inference bursts."""
+    if sys.platform != "linux":
+        return None
+    try:
+        current = os.getpriority(os.PRIO_PROCESS, 0)
+        if current < LINUX_BACKGROUND_NICE:
+            os.setpriority(os.PRIO_PROCESS, 0, LINUX_BACKGROUND_NICE)
+        return os.getpriority(os.PRIO_PROCESS, 0)
+    except (AttributeError, OSError):
+        return None
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--serve", action="store_true")
@@ -556,6 +587,7 @@ def main() -> int:
     if not args.serve or args.socket is None:
         print("use --serve --socket <path>", file=sys.stderr)
         return 2
+    configure_worker_priority()
     try:
         return serve(args.socket)
     except WorkerFailure as error:

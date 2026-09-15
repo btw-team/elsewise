@@ -25,12 +25,20 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--seconds", type=float, default=5.0)
     parser.add_argument("--language", default="en")
+    parser.add_argument(
+        "--profile",
+        choices=("auto", "conservative", "standard", "best"),
+        default="conservative",
+    )
+    parser.add_argument("--microphone-only", action="store_true")
     parser.add_argument("--remote-target", default=None)
     parser.add_argument("--helper", type=Path, default=None)
     parser.add_argument("--speech-worker", type=Path, default=None)
     args = parser.parse_args()
     if not 1.0 <= args.seconds <= 120.0:
         parser.error("--seconds must be between 1 and 120")
+    if args.microphone_only and args.remote_target is not None:
+        parser.error("--remote-target cannot be used with --microphone-only")
     return args
 
 
@@ -55,8 +63,12 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
             title="Native Session smoke",
             language=args.language,
             secondary_fallback_enabled=False,
+            self_audio_enabled=True,
+            remote_audio_enabled=not args.microphone_only,
+            requested_speech_profile=args.profile,
             remote_target_key=args.remote_target,
         )
+        expected_lanes = 1 if args.microphone_only else 2
         try:
             await controller.start(session.id)
             deadline = asyncio.get_running_loop().time() + 30.0
@@ -69,7 +81,9 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                             )
                         )
                     )
-                if len(states) == 2 and all(state in {"running", "failed"} for state in states):
+                if len(states) == expected_lanes and all(
+                    state in {"running", "failed"} for state in states
+                ):
                     break
                 await asyncio.sleep(0.05)
             await asyncio.sleep(args.seconds)
@@ -89,12 +103,21 @@ async def run(args: argparse.Namespace) -> dict[str, Any]:
                         )
                     )
                 )
+            lanes_healthy = all(
+                epoch.dropped_event_count == 0
+                and epoch.discontinuity_count == 0
+                and epoch.xrun_count == 0
+                and epoch.last_error_code is None
+                for epoch in epochs
+            )
             return {
                 "status": "PASS"
                 if stopped.recording_status == "stopped"
-                and len(epochs) == 2
+                and len(epochs) == expected_lanes
                 and all(epoch.state == "stopped" for epoch in epochs)
+                and lanes_healthy
                 else "FAIL",
+                "requested_profile": args.profile,
                 "session_status": stopped.recording_status,
                 "source_status": stopped.source_status,
                 "utterance_count": utterance_count,

@@ -47,6 +47,12 @@ will not overwrite an unrelated file or symlink. Elsewise uses a DMG, not a PKG.
 The AppImage may require FUSE; use the fallback documented by your distribution if
 FUSE execution is unavailable.
 
+Native microphone capture requires the system ALSA runtime. Native system and
+per-application capture use PipeWire tools (`pw-dump` and `pw-record`) first and
+fall back to PulseAudio utilities (`pactl` and `parec`). On Ubuntu/Pop!_OS these
+tools are normally supplied by `pipewire-bin` and `pulseaudio-utils`. Elsewise
+reports native remote audio as unavailable when neither recorder is installed.
+
 ## Browser extensions
 
 Until public store listings are available, releases include ZIP archives for Chrome

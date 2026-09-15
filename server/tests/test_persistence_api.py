@@ -419,6 +419,46 @@ def test_session_editability_follows_first_start_and_running_state(tmp_path: Pat
 
 
 @pytest.mark.integration
+def test_server_shutdown_stops_session_and_same_session_can_restart(tmp_path: Path) -> None:
+    database_path = tmp_path / "shutdown.sqlite3"
+    paths = app_paths(tmp_path)
+    app = create_app(
+        database_url=f"sqlite:///{database_path}",
+        settings_path=tmp_path / "settings.json",
+        agent_provider=FakeAgentProvider(),
+        app_paths=paths,
+    )
+    with TestClient(app, base_url="http://127.0.0.1:38473") as client:
+        created = client.post("/api/sessions", json={"title": "Shutdown session"})
+        assert created.status_code == 201
+        session_id = created.json()["id"]
+        started = client.post(f"/api/sessions/{session_id}/start")
+        assert started.status_code == 200
+        assert started.json()["recording_status"] == "running"
+
+    database = Database.from_path(database_path)
+    stopped = SessionService(database).get(session_id)
+    assert stopped.recording_status == "stopped"
+    with database.transaction() as db:
+        segment = db.scalar(select(RecordingSegmentRecord))
+        assert segment is not None
+        assert segment.stopped_at is not None
+        assert segment.stop_reason == "server_shutdown"
+    database.dispose()
+
+    restarted_app = create_app(
+        database_url=f"sqlite:///{database_path}",
+        settings_path=tmp_path / "settings.json",
+        agent_provider=FakeAgentProvider(),
+        app_paths=paths,
+    )
+    with TestClient(restarted_app, base_url="http://127.0.0.1:38473") as client:
+        restarted = client.post(f"/api/sessions/{session_id}/start")
+        assert restarted.status_code == 200
+        assert restarted.json()["recording_status"] == "running"
+
+
+@pytest.mark.integration
 def test_rest_snapshot_outbox_and_websocket_replay(tmp_path: Path) -> None:
     app = create_app(
         database_url=f"sqlite:///{tmp_path / 'api.sqlite3'}",

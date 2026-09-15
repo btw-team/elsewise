@@ -9,6 +9,7 @@ from time import monotonic
 from typing import Any, Literal, Protocol, cast
 from uuid import UUID, uuid5
 
+import psutil
 from sqlalchemy import select
 
 from elsewise.audio.helper_process import AudioHelperError
@@ -38,6 +39,14 @@ NATIVE_CAPABILITIES = frozenset(
 )
 NativeSourceKind = Literal["native_microphone", "native_process_audio", "native_system_audio"]
 BackendFactory = Callable[[str, str], ASRBackend]
+
+
+def development_speech_threads() -> int:
+    """Keep inference inside the physical CPU budget with interactive headroom."""
+    physical_cores = psutil.cpu_count(logical=False)
+    available_cores = physical_cores or os.cpu_count() or 1
+    reserved_cores = 1 if available_cores > 1 else 0
+    return max(1, min(4, available_cores - reserved_cores))
 
 
 class NativeAudioRuntime(Protocol):
@@ -257,10 +266,16 @@ class NativeSessionRuntime:
                     target_key=target_key,
                 )
             except Exception as error:
+                error_code = self._error_code(error)
+                log_event(
+                    "native_speech.start_failed",
+                    reason=error_code,
+                    error_type=type(error).__name__,
+                )
                 if pipeline is not None:
                     with contextlib.suppress(Exception):
                         await pipeline.stop(timeout_seconds=1.0)
-                self._mark_failed(epoch_id, self._error_code(error))
+                self._mark_failed(epoch_id, error_code)
                 return "failed"
             task = asyncio.create_task(
                 self._consume(epoch_id, handle, pipeline),
@@ -345,7 +360,13 @@ class NativeSessionRuntime:
             raise
         except BaseException as error:
             failure = error
-            self._mark_degraded(epoch_id, self._error_code(error))
+            error_code = self._error_code(error)
+            log_event(
+                "native_speech.consume_failed",
+                reason=error_code,
+                error_type=type(error).__name__,
+            )
+            self._mark_degraded(epoch_id, error_code)
             with contextlib.suppress(AudioHelperError):
                 await handle.stop()
         finally:
@@ -410,7 +431,7 @@ class NativeSessionRuntime:
             model_root=model_root,
             silero_model=models.silero_model,
             finalizer_root=finalizer_root,
-            threads=min(4, os.cpu_count() or 1),
+            threads=development_speech_threads(),
         )
 
     def _mark_started(self, epoch_id: str, backend: ASRBackend) -> None:
@@ -471,6 +492,11 @@ class NativeSessionRuntime:
             return "model_missing"
         if "permission" in message:
             return "permission_denied"
+        if any(
+            marker in message
+            for marker in ("pipewire", "pulseaudio", "linux audio recorder", "system-audio")
+        ):
+            return "loopback_unavailable"
         if "queue" in message or "backpressure" in message:
             return "asr_overloaded"
         if isinstance(error, AudioHelperError):

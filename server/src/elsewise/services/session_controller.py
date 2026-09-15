@@ -64,8 +64,17 @@ class SessionController:
             task.cancel()
         if self._source_start_tasks:
             await asyncio.gather(*self._source_start_tasks, return_exceptions=True)
-        if self.native_runtime is not None:
-            await self.native_runtime.close()
+        try:
+            active_sessions = tuple(
+                session.id
+                for session in self.sessions.list_all()
+                if session.recording_status in {"starting", "running", "stopping"}
+            )
+            for session_id in active_sessions:
+                await self.stop(session_id, reason="server_shutdown")
+        finally:
+            if self.native_runtime is not None:
+                await self.native_runtime.close()
 
     async def start(self, session_id: str) -> SessionRecord:
         if self.sessions.get(session_id).recording_status == "stopping":

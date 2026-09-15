@@ -1,15 +1,26 @@
+import asyncio
 import os
 import signal
 import struct
 import wave
+from concurrent.futures import Future
 from contextlib import suppress
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
 from elsewise.audio.protocol import AudioFrame, AudioFrameFlags
 from elsewise.speech.backends.sherpa_worker import SherpaOnnxBackend
 from elsewise.speech.contracts import SpeechEvent
+from elsewise.speech.worker_process import (
+    MAX_PENDING_RECOGNITIONS_PER_STREAM,
+    RecognitionHypothesis,
+    SherpaOnnxStream,
+    configure_worker_priority,
+)
 from elsewise.speech.worker_protocol import (
     MAX_SPEECH_CONTROL_BYTES,
     SPEECH_WORKER_PROTOCOL_VERSION,
@@ -18,6 +29,81 @@ from elsewise.speech.worker_protocol import (
     encode_worker_message,
 )
 from elsewise.speech.worker_supervisor import SpeechWorkerError, SpeechWorkerSupervisor
+
+
+class _FakeVad:
+    def __init__(self) -> None:
+        self.segments = [SimpleNamespace(samples=[0.1, 0.2], start=640)]
+
+    def empty(self) -> bool:
+        return not self.segments
+
+    @property
+    def front(self) -> Any:
+        return self.segments[0]
+
+    def pop(self) -> None:
+        self.segments.pop(0)
+
+
+class _FakeNumpy:
+    float32 = object()
+
+    @staticmethod
+    def ascontiguousarray(samples: Any, *, dtype: Any) -> Any:
+        del dtype
+        return samples
+
+
+class _FakeExecutor:
+    @staticmethod
+    def submit(function: Any, samples: Any) -> Future[tuple[RecognitionHypothesis, ...]]:
+        del function, samples
+        future: Future[tuple[RecognitionHypothesis, ...]] = Future()
+        future.set_result((RecognitionHypothesis("new", True),))
+        return future
+
+
+def test_linux_worker_priority_yields_to_interactive_processes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    current = 0
+
+    def getpriority(_: int, __: int) -> int:
+        return current
+
+    def setpriority(_: int, __: int, value: int) -> None:
+        nonlocal current
+        current = value
+
+    monkeypatch.setattr("elsewise.speech.worker_process.sys.platform", "linux")
+    monkeypatch.setattr("elsewise.speech.worker_process.os.getpriority", getpriority)
+    monkeypatch.setattr("elsewise.speech.worker_process.os.setpriority", setpriority)
+
+    assert configure_worker_priority() == 10
+    assert current == 10
+
+
+def test_full_recognition_queue_applies_backpressure_without_dropping_stream() -> None:
+    stream = object.__new__(SherpaOnnxStream)
+    mutable_stream: Any = stream
+    mutable_stream.vad = _FakeVad()
+    mutable_stream.vad_origin = 1_000
+    mutable_stream.numpy = _FakeNumpy()
+    mutable_stream.executor = _FakeExecutor()
+    mutable_stream._recognize = lambda samples: ()
+    stream.pending = []
+    for index in range(MAX_PENDING_RECOGNITIONS_PER_STREAM):
+        future: Future[tuple[RecognitionHypothesis, ...]] = Future()
+        future.set_result((RecognitionHypothesis(f"queued-{index}", True),))
+        stream.pending.append((future, index * 10, index * 10 + 10))
+
+    events = stream._schedule_segments()
+
+    assert [event["text"] for event in events] == ["queued-0"]
+    assert len(stream.pending) == MAX_PENDING_RECOGNITIONS_PER_STREAM
+    assert stream.pending[-1][1:] == (1_640, 1_642)
+    assert stream.vad.empty()
 
 
 def test_speech_worker_protocol_is_bounded_and_versioned() -> None:
@@ -111,6 +197,56 @@ async def test_silero_whisper_worker_transcribes_fixture_when_enabled() -> None:
     finally:
         with suppress(SpeechWorkerError):
             await stream.close()
+        await worker.close()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_two_whisper_streams_sustain_bursty_audio_when_enabled() -> None:
+    if os.getenv("ELSEWISE_RUN_SPEECH_MODEL_SMOKE") != "1":
+        pytest.skip("set ELSEWISE_RUN_SPEECH_MODEL_SMOKE=1 for the local model integration")
+    inventory = Path(__file__).parents[2] / "models_loaded"
+    whisper_root = inventory / "sherpa-onnx-whisper-base"
+    silero_model = inventory / "silero/silero_vad.onnx"
+    wav_path = whisper_root / "test_wavs/0.wav"
+    if not all(path.is_file() for path in (silero_model, wav_path)):
+        pytest.skip("local development model inventory is unavailable")
+
+    worker = SpeechWorkerSupervisor()
+    backend = SherpaOnnxBackend(
+        worker,
+        profile="conservative",
+        model_root=whisper_root,
+        silero_model=silero_model,
+        threads=2,
+    )
+    streams = [
+        await backend.create_stream(language="en"),
+        await backend.create_stream(language="en"),
+    ]
+    events: list[SpeechEvent] = []
+    try:
+        sequence = 0
+        sample_position = 0
+        for _ in range(4):
+            for original in wav_frames(wav_path):
+                frame = replace(
+                    original,
+                    sequence=sequence,
+                    source_sample_position=sample_position,
+                )
+                results = await asyncio.gather(*(stream.push_audio(frame) for stream in streams))
+                events.extend(event for result in results for event in result)
+                sequence += 1
+                sample_position += frame.frame_samples
+        results = await asyncio.gather(*(stream.flush() for stream in streams))
+        events.extend(event for result in results for event in result)
+        assert events
+        assert all(event.kind == "final" and event.durable for event in events)
+    finally:
+        for stream in streams:
+            with suppress(SpeechWorkerError):
+                await stream.close()
         await worker.close()
 
 

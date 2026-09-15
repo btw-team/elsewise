@@ -66,13 +66,13 @@
       "start_fields": ["source_id", "epoch_id", "target_key"]
     },
     "native_process_audio": {
-      "platform": "macos 14.6+",
-      "target_key": "bundle:<bundle-id> or pid:<pid>",
+      "platform": "macos 14.6+ or Linux PipeWire/PulseAudio",
+      "target_key": "macOS bundle:<bundle-id>/pid:<pid> or opaque Linux PipeWire/Pulse stream key",
       "start_fields": ["source_id", "epoch_id", "target_key"]
     },
     "native_system_audio": {
-      "platform": "macos 14.6+ in the current implementation",
-      "target_key": "default or an opaque CPAL output device ID",
+      "platform": "macos 14.6+ or Linux PipeWire/PulseAudio",
+      "target_key": "default or an opaque platform output/monitor key",
       "start_fields": ["source_id", "epoch_id", "target_key"]
     }
   },

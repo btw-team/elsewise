@@ -50,8 +50,9 @@ The helper uses separate user-private control and PCM Unix sockets on macOS/Linu
 Its integration suite covers two simultaneous streams, idempotent lifecycle commands,
 bounded backpressure, explicit per-lane overflow, and restart after a process crash.
 
-On macOS 14.6 or newer, list the discovered microphone, process, and system-audio
-targets and run a bounded RAM-only capture smoke with:
+On macOS 14.6 or newer, or on Linux with PipeWire tools/PulseAudio utilities,
+list the discovered microphone, process, and system-audio targets and run a
+bounded RAM-only capture smoke with:
 
 ```bash
 cargo build --workspace
@@ -63,21 +64,27 @@ uv run python scripts/smoke-native-audio.py process \
   --helper target/debug/elsewise-audio
 ```
 
-The process smoke chooses the first actively producing Core Audio process when
+The process smoke chooses the first actively producing process-audio target when
 `--target` is omitted. These commands print only counters and signal level; they do
 not persist PCM. macOS may request Microphone or System Audio Recording permission.
+Linux uses `pw-record` as the primary recorder and `parec` as the PulseAudio fallback.
 
 After the helper and development models are available, exercise the complete Session
 lifecycle (default microphone + default system audio → Silero/Whisper → bounded Stop)
 with:
 
 ```bash
-uv run python scripts/smoke-native-session.py --seconds 10 --language en
+uv run python scripts/smoke-native-session.py --seconds 10 --language en \
+  --profile conservative
 ```
 
 Use `--remote-target bundle:<bundle-id>` to select a discovered process tap. The JSON
 result contains only aggregate lane counters and an utterance count; it never emits or
 persists PCM or transcript text.
+
+Use `--microphone-only` for the weak Linux Conservative gate without a remote lane.
+On Linux, pass the opaque `pipewire:*` or `pulse-stream:*` target returned by the list
+command when testing per-process capture.
 
 After `uv run python scripts/build-frozen.py`, repeat the same source harness against
 the unsigned Intel macOS bundle executables:
@@ -92,7 +99,7 @@ Downloaded models live in the ignored `models_loaded/` development inventory. Ru
 model smoke in its own process so load time and peak RSS remain attributable:
 
 ```bash
-uv run python scripts/smoke-speech-models.py whisper
+uv run --with soundfile python scripts/smoke-speech-models.py whisper
 ```
 
 Valid model names are `silero`, `whisper`, `nemotron`, `parakeet`, `campplus`, and

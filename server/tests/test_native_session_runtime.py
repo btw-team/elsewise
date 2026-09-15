@@ -5,16 +5,25 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from elsewise.audio.helper_process import AudioHelperError
 from elsewise.audio.protocol import AudioFrame, AudioFrameFlags
 from elsewise.persistence.database import Database
-from elsewise.persistence.models import SourceEpochRecord, UtteranceRecord
+from elsewise.persistence.models import (
+    RecordingSegmentRecord,
+    SourceEpochRecord,
+    UtteranceRecord,
+)
 from elsewise.services.session_controller import SessionController
 from elsewise.services.sessions import SessionService
 from elsewise.services.transitions import TransitionExecutor
 from elsewise.sources.manager import SourceManager
 from elsewise.speech.backends.fake import FakeASRBackend
 from elsewise.speech.contracts import SpeechEvent
-from elsewise.speech.session_runtime import DevelopmentSpeechModels, NativeSessionRuntime
+from elsewise.speech.session_runtime import (
+    DevelopmentSpeechModels,
+    NativeSessionRuntime,
+    development_speech_threads,
+)
 from sqlalchemy import select
 
 
@@ -169,6 +178,25 @@ def test_development_models_downgrade_to_highest_available_profile(tmp_path: Pat
     )
 
 
+def test_development_speech_threads_follow_physical_cores(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("elsewise.speech.session_runtime.psutil.cpu_count", lambda logical: 2)
+    assert development_speech_threads() == 1
+
+    monkeypatch.setattr("elsewise.speech.session_runtime.psutil.cpu_count", lambda logical: 8)
+    assert development_speech_threads() == 4
+
+    monkeypatch.setattr("elsewise.speech.session_runtime.psutil.cpu_count", lambda logical: 4)
+    assert development_speech_threads() == 3
+
+
+def test_development_speech_threads_fall_back_to_logical_cores(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("elsewise.speech.session_runtime.psutil.cpu_count", lambda logical: None)
+    monkeypatch.setattr("elsewise.speech.session_runtime.os.cpu_count", lambda: 1)
+    assert development_speech_threads() == 1
+
+
 def backend(_: str, __: str) -> FakeASRBackend:
     return FakeASRBackend(
         flush_events=(
@@ -232,6 +260,61 @@ async def test_session_start_runs_two_native_lanes_and_stop_flushes_speech(
 
 
 @pytest.mark.asyncio
+async def test_controller_close_stops_active_session_and_allows_restart(
+    tmp_path: Path,
+) -> None:
+    database = Database.from_path(tmp_path / "native-shutdown.sqlite3")
+    database.create_schema()
+    sources = SourceManager(database)
+    audio = FakeAudioRuntime()
+    runtime = NativeSessionRuntime(
+        database,
+        sources,
+        audio,  # type: ignore[arg-type]
+        FakeSpeechWorker(),  # type: ignore[arg-type]
+        backend_factory=backend,
+    )
+    controller = SessionController(database, sources, TransitionExecutor(), runtime)
+    session = SessionService(database).create(
+        title="Server shutdown",
+        language="en",
+        secondary_fallback_enabled=False,
+    )
+
+    await controller.start(session.id)
+    for _ in range(20):
+        if len(audio.streams.started) == 2:
+            break
+        await asyncio.sleep(0)
+    await controller.close()
+
+    stopped = SessionService(database).get(session.id)
+    assert stopped.recording_status == "stopped"
+    with database.transaction() as db:
+        first_segment = db.scalar(select(RecordingSegmentRecord))
+        assert first_segment is not None
+        assert first_segment.stopped_at is not None
+        assert first_segment.stop_reason == "server_shutdown"
+        assert len(list(db.scalars(select(UtteranceRecord)))) == 2
+
+    restarted_controller = SessionController(database, sources, TransitionExecutor())
+    restarted = await restarted_controller.start(session.id)
+    assert restarted.recording_status == "running"
+    with database.transaction() as db:
+        segments = list(
+            db.scalars(
+                select(RecordingSegmentRecord)
+                .where(RecordingSegmentRecord.session_id == session.id)
+                .order_by(RecordingSegmentRecord.sequence)
+            )
+        )
+        assert [segment.sequence for segment in segments] == [1, 2]
+    await restarted_controller.stop(session.id)
+    await restarted_controller.close()
+    database.dispose()
+
+
+@pytest.mark.asyncio
 async def test_missing_speech_backend_degrades_lane_without_stopping_session(
     tmp_path: Path,
 ) -> None:
@@ -273,3 +356,10 @@ async def test_missing_speech_backend_degrades_lane_without_stopping_session(
     await controller.stop(session.id)
     await controller.close()
     database.dispose()
+
+
+def test_linux_recorder_dependency_failure_maps_to_loopback_error() -> None:
+    error = AudioHelperError(
+        "capture_start_failed: Linux audio recorder is missing; install PipeWire tools"
+    )
+    assert NativeSessionRuntime._error_code(error) == "loopback_unavailable"

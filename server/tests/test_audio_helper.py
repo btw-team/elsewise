@@ -39,6 +39,14 @@ async def test_rust_helper_synthetic_stream_matches_python_protocol() -> None:
             "native_process_audio",
             "native_system_audio",
         }.issubset(descriptor.capabilities)
+    if sys.platform.startswith("linux"):
+        assert {
+            "native_microphone",
+            "native_process_audio",
+            "native_system_audio",
+            "pipewire_capture",
+            "pulseaudio_fallback",
+        }.issubset(descriptor.capabilities)
 
     frames = [
         frame
