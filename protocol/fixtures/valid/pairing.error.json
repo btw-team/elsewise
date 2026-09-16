@@ -1,5 +1,5 @@
 {
   "type": "pairing.error",
-  "protocol_version": 2,
+  "protocol_version": 3,
   "code": "invalid_message"
 }

@@ -383,7 +383,7 @@ async def test_agent_queue_initial_turn_fifo_stream_cancel_and_resume(tmp_path: 
                 revision=1,
                 text=f"text {index}",
                 final=True,
-                origin_kind="browser_captions",
+                origin_kind="browser_semantic_caption",
                 origin_confidence=1.0,
                 projection_version=1,
                 first_session_offset_us=index * 1_000_000,

@@ -1,5 +1,5 @@
 {
   "type": "heartbeat.ack",
-  "protocol_version": 2,
+  "protocol_version": 3,
   "session": null
 }

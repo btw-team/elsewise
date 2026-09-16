@@ -1,10 +1,11 @@
 import { sanitizeSubtree, sanitizeUrl } from "../content/diagnostics";
+import { captionEvidence, emptySnapshot } from "./base";
 import type {
   AdapterStatus,
-  AdapterUtteranceEvent,
+  AdapterEvidenceEvent,
   DiagnosticBundle,
-  DiscoveryResult,
-  PlatformAdapter,
+  DetectionResult,
+  SemanticAdapter,
 } from "./base";
 
 const extensionVersion = __EXTENSION_VERSION__;
@@ -102,7 +103,7 @@ function extractBlocks(root: Element): ExtractedBlock[] {
   return blocks;
 }
 
-export class GoogleMeetAdapter implements PlatformAdapter {
+export class GoogleMeetAdapter implements SemanticAdapter {
   readonly platform = "google_meet" as const;
   readonly #document: Document;
   readonly #documentIdentity = crypto.randomUUID().slice(0, 8);
@@ -114,7 +115,7 @@ export class GoogleMeetAdapter implements PlatformAdapter {
   #signals: string[] = [];
   #mutations: string[] = [];
   #scanQueued = false;
-  #onEvent: ((event: AdapterUtteranceEvent) => void) | null = null;
+  #onEvent: ((event: AdapterEvidenceEvent) => void) | null = null;
   #onStatus: ((status: AdapterStatus) => void) | null = null;
 
   constructor(document: Document) {
@@ -125,7 +126,26 @@ export class GoogleMeetAdapter implements PlatformAdapter {
     return url.hostname === "meet.google.com";
   }
 
-  discover(document: Document): DiscoveryResult {
+  capabilities() {
+    return new Set(["captions"] as const);
+  }
+
+  snapshot() {
+    const snapshot = emptySnapshot(this.#root !== null);
+    snapshot.participants = [...new Set([...this.#blocks.values()].map((item) => item.speaker))]
+      .filter((name): name is string => name !== null)
+      .map((displayLabel) => ({
+        id: displayLabel,
+        displayLabel,
+        self: false,
+        activeSpeaker: false,
+        muted: null,
+        handRaised: null,
+      }));
+    return snapshot;
+  }
+
+  detect(document: Document): DetectionResult {
     const root = document.querySelector(REGION_SELECTOR);
     const labels = controlLabels(document);
     const matchedSignals: string[] = [];
@@ -142,7 +162,7 @@ export class GoogleMeetAdapter implements PlatformAdapter {
   }
 
   start(
-    onEvent: (event: AdapterUtteranceEvent) => void,
+    onEvent: (event: AdapterEvidenceEvent) => void,
     onStatus: (status: AdapterStatus) => void,
   ): void {
     this.stop();
@@ -193,7 +213,7 @@ export class GoogleMeetAdapter implements PlatformAdapter {
 
   #rediscover(): void {
     const previousRoot = this.#root;
-    const discovery = this.discover(this.#document);
+    const discovery = this.detect(this.#document);
     this.#signals = discovery.matchedSignals;
     if (previousRoot === discovery.root && discovery.root) {
       this.#scan();
@@ -311,15 +331,15 @@ export class GoogleMeetAdapter implements PlatformAdapter {
     this.#emit(state, "finalize");
   }
 
-  #emit(state: BlockState, type: AdapterUtteranceEvent["type"]): void {
-    this.#onEvent?.({
-      type,
-      utteranceId: state.id,
-      revision: state.revision,
-      speaker: state.speaker,
-      text: state.text,
-      observedAt: new Date().toISOString(),
-    });
+  #emit(state: BlockState, type: "upsert" | "finalize"): void {
+    this.#onEvent?.(
+      captionEvidence(this.platform, type, {
+        utteranceId: state.id,
+        revision: state.revision,
+        speaker: state.speaker,
+        text: state.text,
+      }),
+    );
   }
 
   #publishStatus(

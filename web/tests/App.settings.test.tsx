@@ -20,6 +20,53 @@ import {
 installAppTestHarness();
 
 describe("App settings", () => {
+  it("creates a local speaker profile from settings", async () => {
+    const defaultFetch = vi.mocked(fetch).getMockImplementation();
+    vi.mocked(fetch).mockImplementation(async (input, options) => {
+      const path = String(input);
+      if (path.endsWith("/api/speaker-profiles") && options?.method === "POST") {
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({
+            id: "profile-1",
+            display_name: "Alice",
+            aliases: [],
+            prototype_count: 0,
+          }),
+        } as Response;
+      }
+      if (!defaultFetch) throw new Error("Missing default fetch test implementation");
+      return defaultFetch(input, options);
+    });
+
+    render(<App />);
+    await screen.findByRole("heading", { name: "Product planning" });
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    await waitFor(() =>
+      expect(document.querySelector(".speaker-profile-create input")).not.toBeNull(),
+    );
+    const input = document.querySelector(
+      ".speaker-profile-create input",
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Alice" } });
+    fireEvent.click(
+      within(input.closest("form") as HTMLFormElement).getByRole("button", {
+        name: "Add",
+      }),
+    );
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/speaker-profiles",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({ display_name: "Alice", aliases: [] }),
+        }),
+      ),
+    );
+  });
+
   it("switches and persists the shared interface theme immediately", async () => {
     const defaultFetch = vi.mocked(fetch).getMockImplementation();
     vi.mocked(fetch).mockImplementation(async (input, options) => {

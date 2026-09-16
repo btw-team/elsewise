@@ -1,5 +1,5 @@
 {
-  "$id": "https://elsewise.local/protocol/v2/client.hello.schema.json",
+  "$id": "https://elsewise.local/protocol/v3/client.hello.schema.json",
   "additionalProperties": false,
   "properties": {
     "capabilities": {
@@ -28,7 +28,7 @@
       "type": "string"
     },
     "protocol_version": {
-      "const": 2,
+      "const": 3,
       "title": "Protocol Version",
       "type": "integer"
     },

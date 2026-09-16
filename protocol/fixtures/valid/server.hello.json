@@ -1,6 +1,6 @@
 {
   "type": "server.hello",
-  "protocol_version": 2,
+  "protocol_version": 3,
   "capabilities": [
     "pairing_requests",
     "daemon_source_control",

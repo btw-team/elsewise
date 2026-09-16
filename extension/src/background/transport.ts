@@ -156,7 +156,7 @@ export class IngestTransport {
       this.#heartbeat = setInterval(() => {
         if (this.#socket?.readyState === SOCKET_OPEN) {
           this.#socket.send(
-            JSON.stringify({ type: "heartbeat", protocol_version: 2 }),
+            JSON.stringify({ type: "heartbeat", protocol_version: PROTOCOL_VERSION }),
           );
         }
       }, HEARTBEAT_INTERVAL_SECONDS * 1000);

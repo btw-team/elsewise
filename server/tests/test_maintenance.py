@@ -4,10 +4,10 @@ from pathlib import Path
 import pytest
 from elsewise.persistence.database import Database
 from elsewise.persistence.models import (
-    CaptionEventCounterRecord,
-    CaptionEventDiagnosticRecord,
-    CaptionEventTombstoneRecord,
     CaptureSourceRecord,
+    EvidenceEventCounterRecord,
+    EvidenceEventDiagnosticRecord,
+    EvidenceEventTombstoneRecord,
     MaintenanceStateRecord,
     PairedClientRecord,
     UiEventRecord,
@@ -36,7 +36,7 @@ def test_startup_retention_is_bounded_private_and_vacuum_is_throttled(
     with database.transaction() as db:
         for index, (reason, age) in enumerate(
             (
-                ("no_running_session", timedelta(hours=25)),
+                ("no_active_session", timedelta(hours=25)),
                 ("source_not_bound", timedelta(days=8)),
                 ("source_not_bound", timedelta(hours=3)),
                 ("source_not_bound", timedelta(hours=2)),
@@ -44,19 +44,20 @@ def test_startup_retention_is_bounded_private_and_vacuum_is_throttled(
             )
         ):
             db.add(
-                CaptionEventDiagnosticRecord(
+                EvidenceEventDiagnosticRecord(
                     event_id=f"diagnostic-{index}",
                     source_id="source",
-                    event_type="caption.upsert",
+                    capability="captions",
+                    event_kind="caption.partial",
                     processing_result="rejected",
                     reason_code=reason,
-                    protocol_version=2,
+                    protocol_version=3,
                     received_at=NOW - age,
                 )
             )
         for index in range(6):
             db.add(
-                CaptionEventTombstoneRecord(
+                EvidenceEventTombstoneRecord(
                     event_id=f"tombstone-{index}",
                     processing_result="applied",
                     received_at=NOW - timedelta(hours=index),
@@ -71,11 +72,12 @@ def test_startup_retention_is_bounded_private_and_vacuum_is_throttled(
                 )
             )
         db.add(
-            CaptionEventCounterRecord(
-                event_type="caption.upsert",
+            EvidenceEventCounterRecord(
+                capability="captions",
+                event_kind="caption.partial",
                 processing_result="rejected",
-                reason_code="no_running_session",
-                protocol_version=2,
+                reason_code="no_active_session",
+                protocol_version=3,
                 count=99,
                 first_received_at=NOW - timedelta(days=30),
                 last_received_at=NOW,
@@ -95,8 +97,8 @@ def test_startup_retention_is_bounded_private_and_vacuum_is_throttled(
                     id="old-source",
                     paired_client_id=client.id,
                     platform="google_meet",
-                    driver_id="google_meet_captions",
-                    driver_version="2.0.0",
+                    driver_id="browser_semantic",
+                    driver_version="3.0.0",
                     tab_instance_id="old-tab",
                     available=False,
                     connected=False,
@@ -106,8 +108,8 @@ def test_startup_retention_is_bounded_private_and_vacuum_is_throttled(
                     id="recent-source",
                     paired_client_id=client.id,
                     platform="google_meet",
-                    driver_id="google_meet_captions",
-                    driver_version="2.0.0",
+                    driver_id="browser_semantic",
+                    driver_version="3.0.0",
                     tab_instance_id="recent-tab",
                     available=False,
                     connected=False,
@@ -120,25 +122,25 @@ def test_startup_retention_is_bounded_private_and_vacuum_is_throttled(
     assert result.vacuumed is True
     assert vacuum_calls == 1
     with database.transaction() as db:
-        assert db.scalar(select(func.count(CaptionEventDiagnosticRecord.id))) == 2
-        assert db.scalar(select(func.count(CaptionEventTombstoneRecord.event_id))) == 3
+        assert db.scalar(select(func.count(EvidenceEventDiagnosticRecord.id))) == 2
+        assert db.scalar(select(func.count(EvidenceEventTombstoneRecord.event_id))) == 3
         assert db.scalar(select(func.count(UiEventRecord.id))) == 2
         assert db.get(CaptureSourceRecord, "old-source") is None
         assert db.get(CaptureSourceRecord, "recent-source") is not None
-        assert db.scalar(select(CaptionEventCounterRecord.count)) == 99
+        assert db.scalar(select(EvidenceEventCounterRecord.count)) == 99
         state = db.get(MaintenanceStateRecord, 1)
         assert state is not None
         assert state.ui_events_pruned_through == 4
 
     diagnostic_columns = {
         column["name"]
-        for column in inspect(database.engine).get_columns("caption_event_diagnostics")
+        for column in inspect(database.engine).get_columns("evidence_event_diagnostics")
     }
     assert {"text", "speaker", "meeting_title"}.isdisjoint(diagnostic_columns)
 
     with database.transaction() as db:
         db.add(
-            CaptionEventTombstoneRecord(
+            EvidenceEventTombstoneRecord(
                 event_id="expired-after-first-run",
                 processing_result="applied",
                 received_at=NOW - timedelta(days=8),

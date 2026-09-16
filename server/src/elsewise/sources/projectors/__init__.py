@@ -1,3 +1,3 @@
-from elsewise.sources.projectors.captions import CaptionProjector
+from elsewise.sources.projectors.evidence import EvidenceProjector
 
-__all__ = ["CaptionProjector"]
+__all__ = ["EvidenceProjector"]

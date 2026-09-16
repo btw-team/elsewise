@@ -246,8 +246,8 @@ class SourceManager:
                     replaced_source_ids.add(item.id)
                 source = CaptureSourceRecord(
                     paired_client_id=paired_client_id,
-                    source_kind="browser_captions",
-                    source_category="captions",
+                    source_kind="browser_semantic",
+                    source_category="semantic",
                     source_role="secondary",
                     platform=message.platform,
                     driver_id=message.driver_id,
@@ -492,7 +492,7 @@ class SourceManager:
             client_id = source.paired_client_id
             payload = {
                 "type": "source.stop",
-                "protocol_version": 2,
+                "protocol_version": 3,
                 "source_id": source.id,
                 "source_epoch_id": epoch.id,
                 "tab_instance_id": source.tab_instance_id,
@@ -530,7 +530,7 @@ class SourceManager:
                 return "source_not_bound"
             payload = {
                 "type": "source.start",
-                "protocol_version": 2,
+                "protocol_version": 3,
                 "source_id": source.id,
                 "source_epoch_id": epoch.id,
                 "tab_instance_id": source.tab_instance_id,
@@ -588,7 +588,7 @@ class SourceManager:
                         source.paired_client_id,
                         {
                             "type": "source.stop",
-                            "protocol_version": 2,
+                            "protocol_version": 3,
                             "source_id": source.id,
                             "source_epoch_id": epoch.id,
                             "tab_instance_id": source.tab_instance_id,
@@ -878,7 +878,7 @@ class SourceManager:
 
     @staticmethod
     def _effective_mode(source: CaptureSourceRecord) -> str:
-        if source.source_kind == "browser_captions":
+        if source.source_kind == "browser_semantic":
             return "captions"
         if source.source_kind == "synthetic_audio":
             return "synthetic"

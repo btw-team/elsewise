@@ -12,7 +12,7 @@ function manifestSource(name: string): Manifest {
   return JSON.parse(readFileSync(path, "utf8")) as Manifest;
 }
 
-function targetManifest(target: "chrome" | "firefox"): Manifest {
+function targetManifest(target: "chrome" | "firefox" | "safari"): Manifest {
   const base = manifestSource("base");
   const overlay = manifestSource(target);
   return {
@@ -132,6 +132,17 @@ describe("cross-browser manifests", () => {
         },
       },
     });
+  });
+
+  it("uses a minimal Safari Web Extension shell over the shared core", () => {
+    const manifest = targetManifest("safari");
+    expect(manifest.background).toEqual({
+      service_worker: "background.js",
+    });
+    expect(manifest.permissions).not.toContain("sidePanel");
+    expect(manifest).not.toHaveProperty("side_panel");
+    expect(manifest).not.toHaveProperty("sidebar_action");
+    expect(manifest).not.toHaveProperty("browser_specific_settings");
   });
 
   it("ships complete catalogs for all six supported locales", () => {

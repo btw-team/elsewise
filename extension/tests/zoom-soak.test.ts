@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AdapterUtteranceEvent } from "../src/adapters/base";
+import type { AdapterEvidenceEvent } from "../src/adapters/base";
 import { ZoomAdapter } from "../src/adapters/zoom";
 
 afterEach(() => {
@@ -39,7 +39,7 @@ describe("Zoom Web synthetic soak", () => {
       "#live-transcription-subtitle",
     );
     if (!text || !root) throw new Error("caption fixture missing");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -78,7 +78,7 @@ describe("Zoom Web synthetic soak", () => {
       ".live-transcription-subtitle__content",
     );
     if (!content) throw new Error("caption content missing");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),

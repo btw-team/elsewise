@@ -228,6 +228,12 @@
     "description": "A running session has no active capture segment."
   },
   {
+    "code": "speaker_enrollment_unavailable",
+    "http_status": 409,
+    "translation_key": "requestFailed",
+    "description": "Voice sample enrollment is unavailable until the speaker backend is calibrated."
+  },
+  {
     "code": "session_already_started",
     "http_status": 409,
     "translation_key": "sessionRunningError",
@@ -286,6 +292,12 @@
     "http_status": 409,
     "translation_key": "sessionRunningError",
     "description": "The source lifecycle transition is invalid."
+  },
+  {
+    "code": "invalid_speaker_profile",
+    "http_status": 422,
+    "translation_key": "invalidRequest",
+    "description": "The speaker profile name or aliases are invalid."
   },
   {
     "code": "paired_client_not_found",

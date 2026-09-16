@@ -168,3 +168,34 @@ class SpeechProfileResolveRequest(BaseModel):
     ram_mb: int | None = Field(default=None, ge=128, le=1_048_576)
     vram_mb: int = Field(default=0, ge=0, le=1_048_576)
     providers: frozenset[str] = Field(default_factory=lambda: frozenset({"cpu"}), max_length=16)
+
+
+class SpeakerProfileCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    display_name: str = Field(min_length=1, max_length=512)
+    aliases: list[str] = Field(default_factory=list, max_length=32)
+
+
+class SpeakerProfileRename(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    display_name: str = Field(min_length=1, max_length=512)
+
+
+class SpeakerAssignmentUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    profile_id: str | None = Field(default=None, min_length=36, max_length=36)
+    display_label: str | None = Field(default=None, min_length=1, max_length=512)
+    apply_to_anonymous_track: bool = True
+    use_voice_samples: bool = False
+    clear: bool = False
+
+    @model_validator(mode="after")
+    def profile_or_label(self) -> "SpeakerAssignmentUpdate":
+        if self.clear and (self.profile_id is not None or self.display_label is not None):
+            raise ValueError("clear cannot be combined with profile_id or display_label")
+        if not self.clear and self.profile_id is None and self.display_label is None:
+            raise ValueError("profile_id, display_label, or clear is required")
+        return self

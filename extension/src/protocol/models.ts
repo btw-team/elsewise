@@ -1,92 +1,23 @@
-export const PROTOCOL_VERSION = 2 as const;
+export const PROTOCOL_VERSION = 3 as const;
 export type Platform = "google_meet" | "microsoft_teams" | "zoom" | "synthetic";
+export type BrowserFamily = "chrome" | "firefox" | "safari";
 
-export interface ClientHello {
-  type: "client.hello";
-  protocol_version: 2;
-  role: "extension";
-  credential: string;
-  installation_id: string;
-  extension_version: string;
-  capabilities: string[];
-}
-
-export interface PairingRequest {
-  type: "pairing.request";
-  protocol_version: 2;
-  nonce: string;
-  installation_id: string;
-  browser_family: "chrome" | "firefox";
-  display_name: string;
-  extension_version: string;
-}
-
-export interface PairingCancel {
-  type: "pairing.cancel";
-  protocol_version: 2;
-}
-
-export interface PairingPending {
-  type: "pairing.pending";
-  protocol_version: 2;
-  request_id: string;
-  expires_at: string;
-}
-
-export interface PairingApproved {
-  type: "pairing.approved";
-  protocol_version: 2;
-  request_id: string;
-  client_id: string;
-  credential: string;
-}
-
-export interface PairingDenied {
-  type: "pairing.denied";
-  protocol_version: 2;
-  request_id: string;
-}
-
-export interface PairingExpired {
-  type: "pairing.expired";
-  protocol_version: 2;
-  request_id: string;
-}
-
-export interface PairingCancelled {
-  type: "pairing.cancelled";
-  protocol_version: 2;
-  request_id: string;
-}
-
-export interface PairingError {
-  type: "pairing.error";
-  protocol_version: 2;
-  code: string;
-}
-
-export interface ServerHello {
-  type: "server.hello";
-  protocol_version: 2;
-  capabilities: string[];
-  heartbeat_interval_seconds: number;
-  session: Record<string, unknown> | null;
-}
-
-export interface Heartbeat {
-  type: "heartbeat";
-  protocol_version: 2;
-}
-
-export interface HeartbeatAck {
-  type: "heartbeat.ack";
-  protocol_version: 2;
-  session: Record<string, unknown> | null;
-}
+export interface ClientHello { type: "client.hello"; protocol_version: 3; role: "extension"; credential: string; installation_id: string; extension_version: string; capabilities: string[] }
+export interface PairingRequest { type: "pairing.request"; protocol_version: 3; nonce: string; installation_id: string; browser_family: BrowserFamily; display_name: string; extension_version: string }
+export interface PairingCancel { type: "pairing.cancel"; protocol_version: 3 }
+export interface PairingPending { type: "pairing.pending"; protocol_version: 3; request_id: string; expires_at: string }
+export interface PairingApproved { type: "pairing.approved"; protocol_version: 3; request_id: string; client_id: string; credential: string }
+export interface PairingDenied { type: "pairing.denied"; protocol_version: 3; request_id: string }
+export interface PairingExpired { type: "pairing.expired"; protocol_version: 3; request_id: string }
+export interface PairingCancelled { type: "pairing.cancelled"; protocol_version: 3; request_id: string }
+export interface PairingError { type: "pairing.error"; protocol_version: 3; code: string }
+export interface ServerHello { type: "server.hello"; protocol_version: 3; capabilities: string[]; heartbeat_interval_seconds: number; session: Record<string, unknown> | null }
+export interface Heartbeat { type: "heartbeat"; protocol_version: 3 }
+export interface HeartbeatAck { type: "heartbeat.ack"; protocol_version: 3; session: Record<string, unknown> | null }
 
 export interface SourceDiscovered {
   type: "source.discovered";
-  protocol_version: 2;
+  protocol_version: 3;
   event_id: string;
   client_seq: number;
   tab_instance_id: string;
@@ -96,109 +27,58 @@ export interface SourceDiscovered {
   driver_id: string;
   driver_version: string;
   capabilities: string[];
-  health_status:
-    "available" | "waiting" | "degraded" | "unavailable" | "failed";
+  health_status: "available" | "waiting" | "degraded" | "unavailable" | "failed";
   error_code?: string;
   observed_at: string;
 }
 
 export interface SourceHealth {
   type: "source.health";
-  protocol_version: 2;
+  protocol_version: 3;
   event_id: string;
   client_seq: number;
   source_id: string;
   source_epoch_id?: string;
-  health_status:
-    "available" | "waiting" | "degraded" | "unavailable" | "failed";
+  health_status: "available" | "waiting" | "degraded" | "unavailable" | "failed";
   error_code?: string;
   dropped_event_count: number;
   observed_at: string;
 }
 
-export interface CaptionEvidence {
-  protocol_version: 2;
+export interface EvidenceEmit {
+  type: "evidence.emit";
+  protocol_version: 3;
   event_id: string;
   source_id: string;
   source_epoch_id: string;
   client_seq: number;
-  utterance_id: string;
-  revision: number;
-  speaker?: string | null;
-  text: string;
-  session_offset_us: number;
-  source_time_us?: number;
+  capability: string;
+  kind: string;
+  interval_start_us: number;
+  interval_end_us: number;
+  source_time_us: number;
+  timing_uncertainty_us: number;
+  provenance: string;
+  confidence: number;
+  payload: Record<string, unknown>;
 }
 
-export interface CaptionUpsert extends CaptionEvidence {
-  type: "caption.upsert";
-}
-
-export interface CaptionFinalize extends CaptionEvidence {
-  type: "caption.finalize";
-}
-
-export type BufferedEvidence =
-  SourceDiscovered | SourceHealth | CaptionUpsert | CaptionFinalize;
+export type BufferedEvidence = SourceDiscovered | SourceHealth | EvidenceEmit;
 
 export interface EventAck {
   type: "event.ack";
-  protocol_version: 2;
+  protocol_version: 3;
   event_id: string;
   client_seq: number;
-  result:
-    | "applied"
-    | "duplicate"
-    | "stale"
-    | "no_active_session"
-    | "source_not_bound"
-    | "rejected";
+  result: "applied" | "duplicate" | "stale" | "no_active_session" | "source_not_bound" | "rejected";
   reason?: string;
   details?: { source_id?: string; source_epoch_id?: string | null };
 }
 
-export interface SourceCommand {
-  type: "source.start" | "source.stop";
-  protocol_version: 2;
-  command_id: string;
-  source_id: string;
-  source_epoch_id: string;
-  tab_instance_id: string;
-  session_id: string;
-  segment_id: string;
-  deadline_ms: number;
-}
-
-export interface SourceCommandAck {
-  type: "source.command_ack";
-  protocol_version: 2;
-  command_id: string;
-  source_id: string;
-  source_epoch_id: string;
-  result: "started" | "finalized" | "failed";
-  error_code?: string;
-}
-
-export interface ProtocolError {
-  type: "protocol.error";
-  protocol_version: 2;
-  event_id?: string;
-  client_seq?: number;
-  code: string;
-  message: string;
-  recoverable: boolean;
-  details?: Record<string, unknown>;
-}
-
-export interface UiEvent {
-  type: "ui.event";
-  protocol_version: 2;
-  event_id: number;
-  event_type: string;
-  aggregate_id?: string | null;
-  created_at: string;
-  payload: Record<string, unknown>;
-}
+export interface SourceCommand { type: "source.start" | "source.stop"; protocol_version: 3; command_id: string; source_id: string; source_epoch_id: string; tab_instance_id: string; session_id: string; segment_id: string; deadline_ms: number }
+export interface SourceCommandAck { type: "source.command_ack"; protocol_version: 3; command_id: string; source_id: string; source_epoch_id: string; result: "started" | "finalized" | "failed"; error_code?: string }
+export interface ProtocolError { type: "protocol.error"; protocol_version: 3; event_id?: string; client_seq?: number; code: string; message: string; recoverable: boolean; details?: Record<string, unknown> }
+export interface UiEvent { type: "ui.event"; protocol_version: 3; event_id: number; event_type: string; aggregate_id?: string | null; created_at: string; payload: Record<string, unknown> }
 
 export interface ProtocolMessageMap {
   "pairing.request": PairingRequest;
@@ -215,8 +95,7 @@ export interface ProtocolMessageMap {
   "heartbeat.ack": HeartbeatAck;
   "source.discovered": SourceDiscovered;
   "source.health": SourceHealth;
-  "caption.upsert": CaptionUpsert;
-  "caption.finalize": CaptionFinalize;
+  "evidence.emit": EvidenceEmit;
   "event.ack": EventAck;
   "source.start": SourceCommand;
   "source.stop": SourceCommand;

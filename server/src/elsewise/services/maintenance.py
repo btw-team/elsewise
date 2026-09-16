@@ -8,9 +8,9 @@ from sqlalchemy import delete, func, or_, select, update
 from elsewise.observability import log_event
 from elsewise.persistence.database import Database
 from elsewise.persistence.models import (
-    CaptionEventDiagnosticRecord,
-    CaptionEventTombstoneRecord,
     CaptureSourceRecord,
+    EvidenceEventDiagnosticRecord,
+    EvidenceEventTombstoneRecord,
     MaintenanceStateRecord,
     SourceEpochRecord,
     UiEventRecord,
@@ -55,18 +55,18 @@ def _trim_to_limit(database_session: object, model: type[object], limit: int) ->
 
 def _trim_tombstones(database_session: object, limit: int) -> int:
     count = database_session.scalar(  # type: ignore[attr-defined]
-        select(func.count(CaptionEventTombstoneRecord.event_id))
+        select(func.count(EvidenceEventTombstoneRecord.event_id))
     )
     excess = int(count or 0) - limit
     if excess <= 0:
         return 0
     result = database_session.execute(  # type: ignore[attr-defined]
-        delete(CaptionEventTombstoneRecord).where(
-            CaptionEventTombstoneRecord.event_id.in_(
-                select(CaptionEventTombstoneRecord.event_id)
+        delete(EvidenceEventTombstoneRecord).where(
+            EvidenceEventTombstoneRecord.event_id.in_(
+                select(EvidenceEventTombstoneRecord.event_id)
                 .order_by(
-                    CaptionEventTombstoneRecord.received_at,
-                    CaptionEventTombstoneRecord.event_id,
+                    EvidenceEventTombstoneRecord.received_at,
+                    EvidenceEventTombstoneRecord.event_id,
                 )
                 .limit(excess)
             )
@@ -94,24 +94,24 @@ def perform_startup_maintenance(
             db.flush()
 
         diagnostic_result = db.execute(
-            delete(CaptionEventDiagnosticRecord).where(
+            delete(EvidenceEventDiagnosticRecord).where(
                 or_(
-                    (CaptionEventDiagnosticRecord.reason_code == "no_running_session")
+                    (EvidenceEventDiagnosticRecord.reason_code == "no_active_session")
                     & (
-                        CaptionEventDiagnosticRecord.received_at
+                        EvidenceEventDiagnosticRecord.received_at
                         < current - NO_RUNNING_SESSION_RETENTION
                     ),
-                    (CaptionEventDiagnosticRecord.reason_code != "no_running_session")
-                    & (CaptionEventDiagnosticRecord.received_at < current - DIAGNOSTIC_RETENTION),
+                    (EvidenceEventDiagnosticRecord.reason_code != "no_active_session")
+                    & (EvidenceEventDiagnosticRecord.received_at < current - DIAGNOSTIC_RETENTION),
                 )
             )
         )
         diagnostics_deleted += int(getattr(diagnostic_result, "rowcount", 0) or 0)
-        diagnostics_deleted += _trim_to_limit(db, CaptionEventDiagnosticRecord, MAX_DIAGNOSTICS)
+        diagnostics_deleted += _trim_to_limit(db, EvidenceEventDiagnosticRecord, MAX_DIAGNOSTICS)
 
         tombstone_result = db.execute(
-            delete(CaptionEventTombstoneRecord).where(
-                CaptionEventTombstoneRecord.received_at < current - TOMBSTONE_RETENTION
+            delete(EvidenceEventTombstoneRecord).where(
+                EvidenceEventTombstoneRecord.received_at < current - TOMBSTONE_RETENTION
             )
         )
         tombstones_deleted += int(getattr(tombstone_result, "rowcount", 0) or 0)

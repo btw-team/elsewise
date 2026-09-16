@@ -22,7 +22,7 @@ export class FrameElection {
     return true;
   }
 
-  acceptUtterance(tabId: number, frameId: number): boolean {
+  acceptEvidence(tabId: number, frameId: number): boolean {
     const current = this.#elected.get(tabId);
     if (current === undefined) {
       this.#elected.set(tabId, frameId);

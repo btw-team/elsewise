@@ -67,9 +67,13 @@ def test_initial_migration_matches_models_and_seeds_factory_library(tmp_path: Pa
         assert set(Base.metadata.tables) == table_names - {"alembic_version"}
         assert "caption_events" not in table_names
         assert {
-            "caption_event_tombstones",
-            "caption_event_diagnostics",
-            "caption_event_counters",
+            "evidence_event_tombstones",
+            "evidence_event_diagnostics",
+            "evidence_event_counters",
+            "activities",
+            "activity_participants",
+            "speaker_profiles",
+            "speaker_prototypes",
             "maintenance_state",
         }.issubset(table_names)
 

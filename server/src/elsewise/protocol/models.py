@@ -2,10 +2,12 @@ from datetime import datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, model_validator
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
+ProtocolVersion = Literal[3]
 Platform = Literal["google_meet", "microsoft_teams", "zoom", "synthetic"]
+BrowserFamily = Literal["chrome", "firefox", "safari"]
 AckResult = Literal[
     "applied", "duplicate", "stale", "no_active_session", "source_not_bound", "rejected"
 ]
@@ -17,36 +19,36 @@ class StrictMessage(BaseModel):
 
 class PairingRequest(StrictMessage):
     type: Literal["pairing.request"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     nonce: str = Field(min_length=32, max_length=128)
     installation_id: UUID
-    browser_family: Literal["chrome", "firefox"]
+    browser_family: BrowserFamily
     display_name: str = Field(min_length=1, max_length=128)
     extension_version: str = Field(min_length=1, max_length=64)
 
 
 class PairingCancel(StrictMessage):
     type: Literal["pairing.cancel"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
 
 
 class PairingPending(StrictMessage):
     type: Literal["pairing.pending"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     request_id: UUID
     expires_at: datetime
 
 
 class PairingApproved(StrictMessage):
     type: Literal["pairing.approved"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     request_id: UUID
     client_id: UUID
     credential: str = Field(min_length=48, max_length=256)
 
 
 class PairingResult(StrictMessage):
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     request_id: UUID
 
 
@@ -64,13 +66,13 @@ class PairingCancelled(PairingResult):
 
 class PairingError(StrictMessage):
     type: Literal["pairing.error"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     code: str = Field(min_length=1, max_length=128)
 
 
 class ClientHello(StrictMessage):
     type: Literal["client.hello"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     role: Literal["extension"]
     credential: str = Field(min_length=48, max_length=256)
     installation_id: UUID
@@ -80,7 +82,7 @@ class ClientHello(StrictMessage):
 
 class ServerHello(StrictMessage):
     type: Literal["server.hello"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     capabilities: list[str] = Field(max_length=32)
     heartbeat_interval_seconds: int = Field(ge=1, le=300)
     session: dict[str, Any] | None = None
@@ -88,25 +90,25 @@ class ServerHello(StrictMessage):
 
 class Heartbeat(StrictMessage):
     type: Literal["heartbeat"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
 
 
 class HeartbeatAck(StrictMessage):
     type: Literal["heartbeat.ack"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     session: dict[str, Any] | None = None
 
 
 class SourceDiscovered(StrictMessage):
     type: Literal["source.discovered"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     event_id: UUID
     client_seq: int = Field(ge=0, le=9_007_199_254_740_991)
     tab_instance_id: str = Field(min_length=1, max_length=128)
     producer_epoch_id: str = Field(min_length=1, max_length=128)
     platform: Platform
     activity_key: str | None = Field(default=None, min_length=1, max_length=256)
-    driver_id: str = Field(default="browser_captions", min_length=1, max_length=128)
+    driver_id: str = Field(default="browser_semantic", min_length=1, max_length=128)
     driver_version: str = Field(min_length=1, max_length=64)
     capabilities: list[str] = Field(max_length=32)
     health_status: Literal["available", "waiting", "degraded", "unavailable", "failed"]
@@ -116,7 +118,7 @@ class SourceDiscovered(StrictMessage):
 
 class SourceHealth(StrictMessage):
     type: Literal["source.health"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     event_id: UUID
     client_seq: int = Field(ge=0, le=9_007_199_254_740_991)
     source_id: UUID
@@ -127,31 +129,33 @@ class SourceHealth(StrictMessage):
     observed_at: datetime
 
 
-class CaptionEvidence(StrictMessage):
-    protocol_version: Literal[2]
+class EvidenceEmit(StrictMessage):
+    type: Literal["evidence.emit"]
+    protocol_version: ProtocolVersion
     event_id: UUID
     source_id: UUID
     source_epoch_id: UUID
     client_seq: int = Field(ge=0, le=9_007_199_254_740_991)
-    utterance_id: str = Field(min_length=1, max_length=256)
-    revision: int = Field(ge=1, le=2_147_483_647)
-    speaker: str | None = Field(default=None, max_length=512)
-    text: str = Field(min_length=1, max_length=20_000)
-    session_offset_us: int = Field(ge=0, le=9_223_372_036_854_775_807)
-    source_time_us: int | None = Field(default=None, ge=0, le=9_223_372_036_854_775_807)
+    capability: str = Field(min_length=1, max_length=64)
+    kind: str = Field(min_length=1, max_length=128)
+    interval_start_us: int = Field(ge=0, le=9_223_372_036_854_775_807)
+    interval_end_us: int = Field(ge=0, le=9_223_372_036_854_775_807)
+    source_time_us: int = Field(ge=0, le=9_223_372_036_854_775_807)
+    timing_uncertainty_us: int = Field(default=0, ge=0, le=60_000_000)
+    provenance: str = Field(min_length=1, max_length=128)
+    confidence: float = Field(ge=0, le=1)
+    payload: dict[str, Any] = Field(default_factory=dict, max_length=64)
 
-
-class CaptionUpsert(CaptionEvidence):
-    type: Literal["caption.upsert"]
-
-
-class CaptionFinalize(CaptionEvidence):
-    type: Literal["caption.finalize"]
+    @model_validator(mode="after")
+    def interval_is_ordered(self) -> "EvidenceEmit":
+        if self.interval_end_us < self.interval_start_us:
+            raise ValueError("evidence interval must be ordered")
+        return self
 
 
 class EventAck(StrictMessage):
     type: Literal["event.ack"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     event_id: UUID
     client_seq: int = Field(ge=0, le=9_007_199_254_740_991)
     result: AckResult
@@ -160,7 +164,7 @@ class EventAck(StrictMessage):
 
 
 class SourceCommand(StrictMessage):
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     command_id: UUID
     source_id: UUID
     source_epoch_id: UUID
@@ -180,7 +184,7 @@ class SourceStop(SourceCommand):
 
 class SourceCommandAck(StrictMessage):
     type: Literal["source.command_ack"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     command_id: UUID
     source_id: UUID
     source_epoch_id: UUID
@@ -190,7 +194,7 @@ class SourceCommandAck(StrictMessage):
 
 class UiEvent(StrictMessage):
     type: Literal["ui.event"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     event_id: int = Field(ge=1, le=9_007_199_254_740_991)
     event_type: str = Field(min_length=1, max_length=64)
     aggregate_id: str | None = Field(default=None, max_length=256)
@@ -200,8 +204,9 @@ class UiEvent(StrictMessage):
 
 class ProtocolError(StrictMessage):
     type: Literal["protocol.error"]
-    protocol_version: Literal[2]
+    protocol_version: ProtocolVersion
     event_id: UUID | None = None
+    client_seq: int | None = Field(default=None, ge=0, le=9_007_199_254_740_991)
     code: Literal[
         "invalid_json",
         "invalid_message",
@@ -235,8 +240,7 @@ ProtocolMessage = Annotated[
     | HeartbeatAck
     | SourceDiscovered
     | SourceHealth
-    | CaptionUpsert
-    | CaptionFinalize
+    | EvidenceEmit
     | EventAck
     | SourceStart
     | SourceStop

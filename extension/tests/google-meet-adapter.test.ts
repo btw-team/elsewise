@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { GoogleMeetAdapter } from "../src/adapters/google-meet";
 import type {
   AdapterStatus,
-  AdapterUtteranceEvent,
+  AdapterEvidenceEvent,
 } from "../src/adapters/base";
 
 const fixtures = `${resolve(process.cwd(), "../tests/fixtures/google-meet")}/`;
@@ -54,7 +54,7 @@ describe("Google Meet adapter", () => {
 
   it("tracks multiple speakers and non-monotonic revisions in place", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new GoogleMeetAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -80,7 +80,7 @@ describe("Google Meet adapter", () => {
 
   it("finalizes on speaker change and starts a new identity", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new GoogleMeetAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -103,7 +103,7 @@ describe("Google Meet adapter", () => {
 
   it("reconciles a temporarily reinserted block without a duplicate or finalize", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new GoogleMeetAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -123,7 +123,7 @@ describe("Google Meet adapter", () => {
 
   it("finalizes disconnected blocks and rediscovers a recreated caption region", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const statuses: AdapterStatus[] = [];
     const adapter = new GoogleMeetAdapter(document);
     adapter.start(
@@ -144,7 +144,7 @@ describe("Google Meet adapter", () => {
 
   it("supports localized controls and an unknown speaker", () => {
     load("captions-ru-unknown.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new GoogleMeetAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -154,14 +154,14 @@ describe("Google Meet adapter", () => {
       speaker: null,
       text: "Текст без известного автора.",
     });
-    expect(adapter.discover(document).confidence).toBe(1);
+    expect(adapter.detect(document).confidence).toBe(1);
     adapter.stop();
   });
 
   it("uses a conservative idle finalize instead of short pause boundaries", () => {
     vi.useFakeTimers();
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new GoogleMeetAdapter(document);
     adapter.start(
       (event) => events.push(event),

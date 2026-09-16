@@ -6,7 +6,6 @@ from typing import Any, TypedDict
 import pytest
 from elsewise.protocol.models import parse_protocol_message
 from elsewise.protocol.schemas import protocol_root, schema_root, validate_schema
-from elsewise.settings.limits import MAX_CAPTION_TEXT_LENGTH
 from jsonschema.exceptions import ValidationError as JsonSchemaValidationError
 from pydantic import ValidationError as PydanticValidationError
 
@@ -39,10 +38,10 @@ def test_schema_and_pydantic_fixture_parity(case: FixtureCase) -> None:
             parse_protocol_message(payload)
 
 
-def test_caption_text_hard_limit() -> None:
-    fixture = protocol_root() / "fixtures" / "valid" / "caption.upsert.json"
+def test_evidence_payload_field_limit() -> None:
+    fixture = protocol_root() / "fixtures" / "valid" / "evidence.emit.json"
     payload: dict[str, Any] = json.loads(fixture.read_text(encoding="utf-8"))
-    payload["text"] = "x" * (MAX_CAPTION_TEXT_LENGTH + 1)
+    payload["payload"] = {f"field-{index}": index for index in range(65)}
     with pytest.raises(JsonSchemaValidationError):
         parse_protocol_message(payload)
 

@@ -16,10 +16,10 @@ from elsewise.persistence.models import (
     SourceEpochRecord,
     UtteranceRecord,
 )
-from elsewise.protocol.models import CaptionUpsert
+from elsewise.protocol.models import EvidenceEmit
 from elsewise.services.sessions import SessionService
 from elsewise.settings.paths import AppPaths
-from elsewise.sources.projectors.captions import CaptionProjector
+from elsewise.sources.projectors.evidence import EvidenceProjector
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -48,8 +48,8 @@ def test_markdown_export_is_deterministic_partial_safe_and_excludes_frozen_conte
         source = CaptureSourceRecord(
             paired_client_id=client.id,
             platform="google_meet",
-            driver_id="google_meet_captions",
-            driver_version="2.0.0",
+            driver_id="browser_semantic",
+            driver_version="3.0.0",
             tab_instance_id="tab-1",
             capabilities=["captions"],
         )
@@ -65,20 +65,28 @@ def test_markdown_export_is_deterministic_partial_safe_and_excludes_frozen_conte
         db.add(epoch)
         db.flush()
         source_id, epoch_id = source.id, epoch.id
-    CaptionProjector(database).process(
-        CaptionUpsert.model_validate(
+    EvidenceProjector(database).process(
+        EvidenceEmit.model_validate(
             {
-                "type": "caption.upsert",
-                "protocol_version": 2,
+                "type": "evidence.emit",
+                "protocol_version": 3,
                 "event_id": str(uuid4()),
                 "source_id": source_id,
                 "source_epoch_id": epoch_id,
                 "client_seq": 2,
-                "utterance_id": "u-1",
-                "revision": 1,
-                "speaker": "Speaker <A>",
-                "text": '<img src=x onerror="alert(1)"> text',
-                "session_offset_us": 1_000,
+                "capability": "captions",
+                "kind": "caption.partial",
+                "interval_start_us": 1_000,
+                "interval_end_us": 1_000,
+                "source_time_us": 1_000,
+                "provenance": "meet.dom",
+                "confidence": 1.0,
+                "payload": {
+                    "utterance_id": "u-1",
+                    "revision": 1,
+                    "speaker": "Speaker <A>",
+                    "text": '<img src=x onerror="alert(1)"> text',
+                },
             }
         )
     )

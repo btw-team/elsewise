@@ -204,13 +204,13 @@ def test_native_source_identity_and_active_lane_constraints(tmp_path: Path) -> N
     with pytest.raises(IntegrityError), database.transaction() as db:
         db.add(
             CaptureSourceRecord(
-                source_kind="browser_captions",
-                source_category="captions",
+                source_kind="browser_semantic",
+                source_category="semantic",
                 source_role="secondary",
                 platform="google_meet",
-                driver_id="browser_captions",
-                driver_version="2",
-                protocol_version=2,
+                driver_id="browser_semantic",
+                driver_version="3",
+                protocol_version=3,
                 capabilities=["captions"],
             )
         )

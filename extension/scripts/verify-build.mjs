@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const target = process.argv[2];
-if (target !== "chrome" && target !== "firefox") {
-  throw new Error("Expected build target: chrome or firefox");
+if (target !== "chrome" && target !== "firefox" && target !== "safari") {
+  throw new Error("Expected build target: chrome, firefox, or safari");
 }
 
 const output = resolve(import.meta.dirname, "..", "dist", target);
@@ -44,14 +44,23 @@ if (target === "chrome") {
     throw new Error("The Chrome build contains an invalid target manifest");
   }
 } else if (
-  manifest.background?.scripts?.[0] !== "background.js" ||
-  manifest.sidebar_action?.default_panel !== "sidepanel.html" ||
-  manifest.browser_specific_settings?.gecko?.strict_min_version !== "140.0" ||
-  !manifest.browser_specific_settings?.gecko?.data_collection_permissions ||
-  manifest.side_panel ||
-  manifest.permissions?.includes("sidePanel")
+  target === "firefox" &&
+  (manifest.background?.scripts?.[0] !== "background.js" ||
+    manifest.sidebar_action?.default_panel !== "sidepanel.html" ||
+    manifest.browser_specific_settings?.gecko?.strict_min_version !== "140.0" ||
+    !manifest.browser_specific_settings?.gecko?.data_collection_permissions ||
+    manifest.side_panel ||
+    manifest.permissions?.includes("sidePanel"))
 ) {
   throw new Error("The Firefox build contains an invalid target manifest");
+} else if (
+  target === "safari" &&
+  (manifest.background?.service_worker !== "background.js" ||
+    manifest.side_panel ||
+    manifest.sidebar_action ||
+    manifest.permissions?.includes("sidePanel"))
+) {
+  throw new Error("The Safari build contains an invalid target manifest");
 }
 
 process.stdout.write(`Verified ${target} extension build at ${output}\n`);

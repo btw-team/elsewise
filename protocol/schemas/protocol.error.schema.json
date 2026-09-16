@@ -1,7 +1,21 @@
 {
-  "$id": "https://elsewise.local/protocol/v2/protocol.error.schema.json",
+  "$id": "https://elsewise.local/protocol/v3/protocol.error.schema.json",
   "additionalProperties": false,
   "properties": {
+    "client_seq": {
+      "anyOf": [
+        {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Client Seq"
+    },
     "code": {
       "enum": [
         "invalid_json",
@@ -52,7 +66,7 @@
       "type": "string"
     },
     "protocol_version": {
-      "const": 2,
+      "const": 3,
       "title": "Protocol Version",
       "type": "integer"
     },
@@ -66,7 +80,13 @@
       "type": "string"
     }
   },
-  "required": ["type", "protocol_version", "code", "message", "recoverable"],
+  "required": [
+    "type",
+    "protocol_version",
+    "code",
+    "message",
+    "recoverable"
+  ],
   "title": "ProtocolError",
   "type": "object"
 }

@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
@@ -124,7 +125,7 @@ class CaptureSourceRecord(Base):
     __table_args__ = (
         CheckConstraint("protocol_version >= 1", name="ck_capture_sources_protocol"),
         CheckConstraint(
-            "source_category IN ('audio', 'captions', 'synthetic')",
+            "source_category IN ('audio', 'semantic', 'synthetic')",
             name="ck_capture_sources_category",
         ),
         CheckConstraint(
@@ -133,14 +134,15 @@ class CaptureSourceRecord(Base):
         ),
         CheckConstraint(
             "source_kind IN ('native_microphone', 'native_process_audio', "
-            "'native_system_audio', 'browser_captions', 'synthetic_audio')",
+            "'native_system_audio', 'browser_semantic', 'accessibility_macos', "
+            "'accessibility_linux', 'accessibility_windows', 'synthetic_audio')",
             name="ck_capture_sources_kind",
         ),
         CheckConstraint(
-            "(source_kind = 'browser_captions' AND paired_client_id IS NOT NULL "
-            "AND tab_instance_id IS NOT NULL AND source_category = 'captions' "
+            "(source_kind = 'browser_semantic' AND paired_client_id IS NOT NULL "
+            "AND tab_instance_id IS NOT NULL AND source_category = 'semantic' "
             "AND source_role = 'secondary') OR "
-            "(source_kind != 'browser_captions' AND paired_client_id IS NULL "
+            "(source_kind != 'browser_semantic' AND paired_client_id IS NULL "
             "AND tab_instance_id IS NULL)",
             name="ck_capture_sources_identity",
         ),
@@ -154,14 +156,14 @@ class CaptureSourceRecord(Base):
     paired_client_id: Mapped[str | None] = mapped_column(
         ForeignKey("paired_clients.id", ondelete="CASCADE"), index=True
     )
-    source_kind: Mapped[str] = mapped_column(String(64), default="browser_captions")
-    source_category: Mapped[str] = mapped_column(String(32), default="captions", index=True)
+    source_kind: Mapped[str] = mapped_column(String(64), default="browser_semantic")
+    source_category: Mapped[str] = mapped_column(String(32), default="semantic", index=True)
     source_role: Mapped[str] = mapped_column(String(32), default="secondary", index=True)
     target_key: Mapped[str | None] = mapped_column(String(256), index=True)
     platform: Mapped[str] = mapped_column(String(64))
-    driver_id: Mapped[str] = mapped_column(String(128), default="browser_captions")
+    driver_id: Mapped[str] = mapped_column(String(128), default="browser_semantic")
     driver_version: Mapped[str] = mapped_column(String(64), default="unknown")
-    protocol_version: Mapped[int] = mapped_column(Integer, default=2)
+    protocol_version: Mapped[int] = mapped_column(Integer, default=3)
     tab_instance_id: Mapped[str | None] = mapped_column(String(128), index=True)
     activity_key: Mapped[str | None] = mapped_column(String(256))
     capabilities: Mapped[list[str]] = mapped_column(JSON, default=list)
@@ -350,8 +352,8 @@ class SourceEpochRecord(Base):
     xrun_count: Mapped[int] = mapped_column(Integer, default=0)
 
 
-class CaptionEventTombstoneRecord(Base):
-    __tablename__ = "caption_event_tombstones"
+class EvidenceEventTombstoneRecord(Base):
+    __tablename__ = "evidence_event_tombstones"
 
     event_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     processing_result: Mapped[str] = mapped_column(String(64))
@@ -360,13 +362,14 @@ class CaptionEventTombstoneRecord(Base):
     )
 
 
-class CaptionEventDiagnosticRecord(Base):
-    __tablename__ = "caption_event_diagnostics"
+class EvidenceEventDiagnosticRecord(Base):
+    __tablename__ = "evidence_event_diagnostics"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     event_id: Mapped[str] = mapped_column(String(36), unique=True)
     source_id: Mapped[str] = mapped_column(String(256), index=True)
-    event_type: Mapped[str] = mapped_column(String(64))
+    capability: Mapped[str] = mapped_column(String(64))
+    event_kind: Mapped[str] = mapped_column(String(128))
     processing_result: Mapped[str] = mapped_column(String(64))
     reason_code: Mapped[str] = mapped_column(String(128), index=True)
     protocol_version: Mapped[int] = mapped_column(Integer)
@@ -375,20 +378,22 @@ class CaptionEventDiagnosticRecord(Base):
     )
 
 
-class CaptionEventCounterRecord(Base):
-    __tablename__ = "caption_event_counters"
+class EvidenceEventCounterRecord(Base):
+    __tablename__ = "evidence_event_counters"
     __table_args__ = (
         UniqueConstraint(
-            "event_type",
+            "capability",
+            "event_kind",
             "processing_result",
             "reason_code",
             "protocol_version",
-            name="uq_caption_event_counter",
+            name="uq_evidence_event_counter",
         ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    event_type: Mapped[str] = mapped_column(String(64))
+    capability: Mapped[str] = mapped_column(String(64))
+    event_kind: Mapped[str] = mapped_column(String(128))
     processing_result: Mapped[str] = mapped_column(String(64))
     reason_code: Mapped[str] = mapped_column(String(128))
     protocol_version: Mapped[int] = mapped_column(Integer)
@@ -436,7 +441,7 @@ class UtteranceRecord(Base):
     revision: Mapped[int] = mapped_column(Integer)
     text: Mapped[str] = mapped_column(Text)
     final: Mapped[bool] = mapped_column(Boolean, default=False)
-    origin_kind: Mapped[str] = mapped_column(String(64), default="browser_captions")
+    origin_kind: Mapped[str] = mapped_column(String(64), default="browser_semantic_caption")
     origin_confidence: Mapped[float] = mapped_column(Float, default=1.0)
     projection_version: Mapped[int] = mapped_column(Integer, default=1)
     first_session_offset_us: Mapped[int] = mapped_column(Integer)
@@ -457,6 +462,176 @@ class UtteranceRecord(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, onupdate=utc_now
     )
+
+
+class ActivityRecord(Base):
+    __tablename__ = "activities"
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('detected', 'running', 'ended')", name="ck_activities_state"
+        ),
+        CheckConstraint(
+            "started_offset_us >= 0 AND (ended_offset_us IS NULL OR "
+            "ended_offset_us >= started_offset_us)",
+            name="ck_activities_offsets",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1", name="ck_activities_confidence"
+        ),
+        CheckConstraint(
+            "presentation_state IN ('unknown', 'active', 'stopped')",
+            name="ck_activities_presentation_state",
+        ),
+        CheckConstraint(
+            "recording_state IN ('unknown', 'active', 'stopped')",
+            name="ck_activities_recording_state",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), index=True
+    )
+    activity_key_digest: Mapped[str] = mapped_column(String(64), index=True)
+    state: Mapped[str] = mapped_column(String(32), default="detected", index=True)
+    started_offset_us: Mapped[int] = mapped_column(Integer, default=0)
+    ended_offset_us: Mapped[int | None] = mapped_column(Integer)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    provenance: Mapped[str] = mapped_column(String(128))
+    presentation_state: Mapped[str] = mapped_column(String(32), default="unknown")
+    recording_state: Mapped[str] = mapped_column(String(32), default="unknown")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class ActivitySourceLinkRecord(Base):
+    __tablename__ = "activity_source_links"
+    __table_args__ = (
+        UniqueConstraint("activity_id", "source_id", name="uq_activity_source_link"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    activity_id: Mapped[str] = mapped_column(
+        ForeignKey("activities.id", ondelete="CASCADE"), index=True
+    )
+    source_id: Mapped[str] = mapped_column(
+        ForeignKey("capture_sources.id", ondelete="CASCADE"), index=True
+    )
+    first_observed_offset_us: Mapped[int] = mapped_column(Integer, default=0)
+    last_observed_offset_us: Mapped[int] = mapped_column(Integer, default=0)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    provenance: Mapped[str] = mapped_column(String(128))
+
+
+class ActivityParticipantRecord(Base):
+    __tablename__ = "activity_participants"
+    __table_args__ = (
+        UniqueConstraint(
+            "activity_id", "identity_digest", name="uq_activity_participant_identity"
+        ),
+        CheckConstraint(
+            "presence_state IN ('present', 'left', 'unknown')",
+            name="ck_activity_participants_presence",
+        ),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_activity_participants_confidence",
+        ),
+        CheckConstraint("last_observed_offset_us >= 0", name="ck_activity_participants_offset"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    activity_id: Mapped[str] = mapped_column(
+        ForeignKey("activities.id", ondelete="CASCADE"), index=True
+    )
+    identity_digest: Mapped[str] = mapped_column(String(64), index=True)
+    display_label: Mapped[str | None] = mapped_column(String(512))
+    is_self: Mapped[bool] = mapped_column(Boolean, default=False)
+    presence_state: Mapped[str] = mapped_column(String(32), default="present")
+    muted: Mapped[bool | None] = mapped_column(Boolean)
+    hand_raised: Mapped[bool | None] = mapped_column(Boolean)
+    confidence: Mapped[float] = mapped_column(Float, default=0.0)
+    provenance: Mapped[str] = mapped_column(String(128))
+    last_observed_offset_us: Mapped[int] = mapped_column(Integer, default=0)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class SpeakerProfileRecord(Base):
+    __tablename__ = "speaker_profiles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    display_name: Mapped[str] = mapped_column(String(512), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+
+class SpeakerProfileAliasRecord(Base):
+    __tablename__ = "speaker_profile_aliases"
+    __table_args__ = (
+        UniqueConstraint("profile_id", "normalized_alias", name="uq_speaker_profile_alias"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    profile_id: Mapped[str] = mapped_column(
+        ForeignKey("speaker_profiles.id", ondelete="CASCADE"), index=True
+    )
+    alias: Mapped[str] = mapped_column(String(512))
+    normalized_alias: Mapped[str] = mapped_column(String(512))
+
+
+class SpeakerPrototypeRecord(Base):
+    __tablename__ = "speaker_prototypes"
+    __table_args__ = (
+        CheckConstraint("dimensions > 0", name="ck_speaker_prototypes_dimensions"),
+        CheckConstraint(
+            "quality >= 0 AND quality <= 1", name="ck_speaker_prototypes_quality"
+        ),
+        CheckConstraint(
+            "speech_duration_ms > 0", name="ck_speaker_prototypes_duration"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    profile_id: Mapped[str] = mapped_column(
+        ForeignKey("speaker_profiles.id", ondelete="CASCADE"), index=True
+    )
+    model_id: Mapped[str] = mapped_column(String(256), index=True)
+    model_version: Mapped[str] = mapped_column(String(128))
+    dimensions: Mapped[int] = mapped_column(Integer)
+    embedding: Mapped[bytes] = mapped_column(LargeBinary)
+    quality: Mapped[float] = mapped_column(Float)
+    speech_duration_ms: Mapped[int] = mapped_column(Integer)
+    source_type: Mapped[str] = mapped_column(String(64))
+    consent_provenance: Mapped[str] = mapped_column(String(128))
+    metadata_json: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class SpeakerSemanticIdentityRecord(Base):
+    __tablename__ = "speaker_semantic_identities"
+    __table_args__ = (
+        UniqueConstraint("identity_kind", "identity_digest", name="uq_speaker_semantic_identity"),
+        CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_speaker_semantic_identities_confidence",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    profile_id: Mapped[str] = mapped_column(
+        ForeignKey("speaker_profiles.id", ondelete="CASCADE"), index=True
+    )
+    identity_kind: Mapped[str] = mapped_column(String(64))
+    identity_digest: Mapped[str] = mapped_column(String(64), index=True)
+    confidence: Mapped[float] = mapped_column(Float)
+    provenance: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
 
 class UtteranceSpeakerAssignmentRecord(Base):
@@ -480,7 +655,9 @@ class UtteranceSpeakerAssignmentRecord(Base):
     revision: Mapped[int] = mapped_column(Integer, default=1)
     speaker_role: Mapped[str] = mapped_column(String(32), default="unknown", index=True)
     display_label: Mapped[str | None] = mapped_column(String(512))
-    speaker_profile_id: Mapped[str | None] = mapped_column(String(36))
+    speaker_profile_id: Mapped[str | None] = mapped_column(
+        ForeignKey("speaker_profiles.id", ondelete="SET NULL"), index=True
+    )
     anonymous_track_id: Mapped[str | None] = mapped_column(String(128))
     confidence: Mapped[float] = mapped_column(Float, default=1.0)
     evidence_refs: Mapped[list[str]] = mapped_column(JSON, default=list)

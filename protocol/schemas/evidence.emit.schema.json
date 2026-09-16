@@ -1,0 +1,109 @@
+{
+  "$id": "https://elsewise.local/protocol/v3/evidence.emit.schema.json",
+  "additionalProperties": false,
+  "properties": {
+    "capability": {
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Capability",
+      "type": "string"
+    },
+    "client_seq": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Client Seq",
+      "type": "integer"
+    },
+    "confidence": {
+      "maximum": 1,
+      "minimum": 0,
+      "title": "Confidence",
+      "type": "number"
+    },
+    "event_id": {
+      "format": "uuid",
+      "title": "Event Id",
+      "type": "string"
+    },
+    "interval_end_us": {
+      "maximum": 9223372036854775807,
+      "minimum": 0,
+      "title": "Interval End Us",
+      "type": "integer"
+    },
+    "interval_start_us": {
+      "maximum": 9223372036854775807,
+      "minimum": 0,
+      "title": "Interval Start Us",
+      "type": "integer"
+    },
+    "kind": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Kind",
+      "type": "string"
+    },
+    "payload": {
+      "additionalProperties": true,
+      "maxProperties": 64,
+      "title": "Payload",
+      "type": "object"
+    },
+    "protocol_version": {
+      "const": 3,
+      "title": "Protocol Version",
+      "type": "integer"
+    },
+    "provenance": {
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Provenance",
+      "type": "string"
+    },
+    "source_epoch_id": {
+      "format": "uuid",
+      "title": "Source Epoch Id",
+      "type": "string"
+    },
+    "source_id": {
+      "format": "uuid",
+      "title": "Source Id",
+      "type": "string"
+    },
+    "source_time_us": {
+      "maximum": 9223372036854775807,
+      "minimum": 0,
+      "title": "Source Time Us",
+      "type": "integer"
+    },
+    "timing_uncertainty_us": {
+      "default": 0,
+      "maximum": 60000000,
+      "minimum": 0,
+      "title": "Timing Uncertainty Us",
+      "type": "integer"
+    },
+    "type": {
+      "const": "evidence.emit",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "type",
+    "protocol_version",
+    "event_id",
+    "source_id",
+    "source_epoch_id",
+    "client_seq",
+    "capability",
+    "kind",
+    "interval_start_us",
+    "interval_end_us",
+    "source_time_us",
+    "provenance",
+    "confidence"
+  ],
+  "title": "EvidenceEmit",
+  "type": "object"
+}

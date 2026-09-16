@@ -50,9 +50,9 @@ class SourceDriverRegistry:
 
 
 def default_source_registry() -> SourceDriverRegistry:
-    from elsewise.sources.drivers.browser_captions import DRIVER as browser_captions
+    from elsewise.sources.drivers.browser_semantic import DRIVER as browser_semantic
     from elsewise.sources.drivers.native_audio import DRIVER as native_audio
     from elsewise.sources.drivers.synthetic import DRIVER as synthetic
     from elsewise.sources.drivers.synthetic_audio import DRIVER as synthetic_audio
 
-    return SourceDriverRegistry((browser_captions, synthetic, native_audio, synthetic_audio))
+    return SourceDriverRegistry((browser_semantic, synthetic, native_audio, synthetic_audio))

@@ -61,6 +61,9 @@ export interface Utterance {
   revision: number;
   speaker: string | null;
   speaker_role: "self" | "remote" | "unknown";
+  speaker_profile_id: string | null;
+  speaker_assignment_revision: number | null;
+  speaker_assignment_provenance: string | null;
   text: string;
   final: boolean;
   first_session_offset_us: number;
@@ -78,6 +81,13 @@ export interface Utterance {
   transcript_confidence: number | null;
 }
 
+export interface SpeakerProfile {
+  id: string;
+  display_name: string;
+  aliases: string[];
+  prototype_count: number;
+}
+
 export interface Segment {
   id: string;
   session_id: string;
@@ -91,7 +101,7 @@ export interface CaptureSource {
   id: string;
   paired_client_id: string | null;
   source_kind: string;
-  source_category: "audio" | "captions" | "semantic" | "synthetic";
+  source_category: "audio" | "semantic" | "synthetic";
   source_role: "self" | "remote" | "secondary";
   target_key: string | null;
   platform: string;
@@ -309,7 +319,7 @@ export interface AgentModelOption {
 
 export interface UiEvent {
   type: "ui.event";
-  protocol_version: 2;
+  protocol_version: 3;
   event_id: number;
   event_type: string;
   aggregate_id: string | null;

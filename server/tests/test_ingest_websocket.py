@@ -28,7 +28,7 @@ def paired_credential(app: FastAPI) -> tuple[str, str, str]:
         installation_id=installation_id,
         browser_family="chrome",
         display_name="Test Chrome",
-        extension_version="2.0.0",
+        extension_version="3.0.0",
         nonce=nonce,
     )
     client = pairing.approve(request.id)
@@ -40,11 +40,11 @@ def paired_credential(app: FastAPI) -> tuple[str, str, str]:
 def hello(installation_id: str, credential: str) -> dict[str, object]:
     return {
         "type": "client.hello",
-        "protocol_version": 2,
+        "protocol_version": 3,
         "role": "extension",
         "credential": credential,
         "installation_id": installation_id,
-        "extension_version": "2.0.0",
+        "extension_version": "3.0.0",
         "capabilities": [
             "pairing_requests",
             "daemon_source_control",
@@ -56,15 +56,15 @@ def hello(installation_id: str, credential: str) -> dict[str, object]:
 def discovered(client_seq: int = 1) -> dict[str, object]:
     return {
         "type": "source.discovered",
-        "protocol_version": 2,
+        "protocol_version": 3,
         "event_id": str(uuid4()),
         "client_seq": client_seq,
         "tab_instance_id": "tab-runtime-1",
         "producer_epoch_id": "producer-1",
         "platform": "synthetic",
         "activity_key": "opaque-activity",
-        "driver_id": "synthetic_captions",
-        "driver_version": "2.0.0",
+        "driver_id": "synthetic_semantic",
+        "driver_version": "3.0.0",
         "capabilities": [
             "captions",
             "daemon_source_control",
@@ -77,18 +77,25 @@ def discovered(client_seq: int = 1) -> dict[str, object]:
 
 def caption(source_id: str, epoch_id: str, event_id: str) -> dict[str, object]:
     return {
-        "type": "caption.upsert",
-        "protocol_version": 2,
+        "type": "evidence.emit",
+        "protocol_version": 3,
         "event_id": event_id,
         "source_id": source_id,
         "source_epoch_id": epoch_id,
         "client_seq": 2,
-        "utterance_id": "synthetic-1",
-        "revision": 1,
-        "speaker": "Speaker A",
-        "text": "Synthetic caption",
-        "session_offset_us": 1_000_000,
+        "capability": "captions",
+        "kind": "caption.partial",
+        "interval_start_us": 500_000,
+        "interval_end_us": 500_000,
         "source_time_us": 500_000,
+        "provenance": "synthetic.dom",
+        "confidence": 1.0,
+        "payload": {
+            "utterance_id": "synthetic-1",
+            "revision": 1,
+            "speaker": "Speaker A",
+            "text": "Synthetic caption",
+        },
     }
 
 
@@ -103,12 +110,12 @@ def test_pairing_approval_and_ingest_ack_duplicate(tmp_path: Path) -> None:
             websocket.send_json(
                 {
                     "type": "pairing.request",
-                    "protocol_version": 2,
+                    "protocol_version": 3,
                     "nonce": nonce,
                     "installation_id": str(uuid4()),
                     "browser_family": "chrome",
                     "display_name": "Work Chrome <script>",
-                    "extension_version": "2.0.0",
+                    "extension_version": "3.0.0",
                 }
             )
             pending = websocket.receive_json()
@@ -127,7 +134,7 @@ def test_pairing_approval_and_ingest_ack_duplicate(tmp_path: Path) -> None:
             "/ws/ingest", headers={"origin": EXTENSION_ORIGIN}
         ) as websocket:
             websocket.send_json(hello(installation_id, credential))
-            assert websocket.receive_json()["protocol_version"] == 2
+            assert websocket.receive_json()["protocol_version"] == 3
             websocket.send_json(discovered())
             source_ack = websocket.receive_json()
             source_id = source_ack["details"]["source_id"]
@@ -137,7 +144,7 @@ def test_pairing_approval_and_ingest_ack_duplicate(tmp_path: Path) -> None:
             websocket.send_json(
                 {
                     "type": "source.command_ack",
-                    "protocol_version": 2,
+                    "protocol_version": 3,
                     "command_id": command["command_id"],
                     "source_id": source_id,
                     "source_epoch_id": epoch_id,
@@ -179,7 +186,7 @@ def test_ingest_rejects_bad_origin_credential_and_revoked_client(tmp_path: Path)
 
 
 @pytest.mark.integration
-def test_ingest_requires_v2_hello_and_enforces_message_size(tmp_path: Path) -> None:
+def test_ingest_requires_v3_hello_and_enforces_message_size(tmp_path: Path) -> None:
     app = make_app(tmp_path)
     with TestClient(app, base_url="http://127.0.0.1:38473") as client:
         installation_id, _, credential = paired_credential(app)
@@ -223,6 +230,6 @@ def test_ingest_rate_limit_is_typed_and_recoverable(
             websocket.send_json(discovered(3))
             error = websocket.receive_json()
             assert error["type"] == "protocol.error"
-            assert error["protocol_version"] == 2
+            assert error["protocol_version"] == 3
             assert error["code"] == "rate_limited"
             assert error["recoverable"] is True

@@ -1,10 +1,11 @@
 import { sanitizeSubtree, sanitizeUrl } from "../content/diagnostics";
+import { captionEvidence, emptySnapshot } from "./base";
 import type {
   AdapterStatus,
-  AdapterUtteranceEvent,
+  AdapterEvidenceEvent,
   DiagnosticBundle,
-  DiscoveryResult,
-  PlatformAdapter,
+  DetectionResult,
+  SemanticAdapter,
 } from "./base";
 
 const extensionVersion = __EXTENSION_VERSION__;
@@ -199,7 +200,7 @@ function relationScore(left: string, right: string): number {
   return Math.max(prefix, suffixPrefix);
 }
 
-export class ZoomAdapter implements PlatformAdapter {
+export class ZoomAdapter implements SemanticAdapter {
   readonly platform = "zoom" as const;
   readonly #document: Document;
   readonly #documentIdentity = crypto.randomUUID().slice(0, 8);
@@ -216,7 +217,7 @@ export class ZoomAdapter implements PlatformAdapter {
   #signals: string[] = [];
   #mutations: string[] = [];
   #scanTimer: ReturnType<typeof setTimeout> | null = null;
-  #onEvent: ((event: AdapterUtteranceEvent) => void) | null = null;
+  #onEvent: ((event: AdapterEvidenceEvent) => void) | null = null;
   #onStatus: ((status: AdapterStatus) => void) | null = null;
 
   constructor(document: Document) {
@@ -227,7 +228,26 @@ export class ZoomAdapter implements PlatformAdapter {
     return url.hostname === "app.zoom.us";
   }
 
-  discover(document: Document): DiscoveryResult {
+  capabilities() {
+    return new Set(["captions"] as const);
+  }
+
+  snapshot() {
+    const snapshot = emptySnapshot(this.#overlay !== null);
+    snapshot.participants = [...new Set([...this.#segments.values()].map((item) => item.speaker))]
+      .filter((name): name is string => name !== null)
+      .map((displayLabel) => ({
+        id: displayLabel,
+        displayLabel,
+        self: false,
+        activeSpeaker: false,
+        muted: null,
+        handRaised: null,
+      }));
+    return snapshot;
+  }
+
+  detect(document: Document): DetectionResult {
     const root = document.querySelector(OVERLAY_SELECTOR);
     const labels = controlLabels(document);
     const matchedSignals: string[] = [];
@@ -257,7 +277,7 @@ export class ZoomAdapter implements PlatformAdapter {
   }
 
   start(
-    onEvent: (event: AdapterUtteranceEvent) => void,
+    onEvent: (event: AdapterEvidenceEvent) => void,
     onStatus: (status: AdapterStatus) => void,
   ): void {
     this.stop();
@@ -314,7 +334,7 @@ export class ZoomAdapter implements PlatformAdapter {
 
   #rediscover(): void {
     const previousOverlay = this.#overlay;
-    const discovery = this.discover(this.#document);
+    const discovery = this.detect(this.#document);
     this.#signals = discovery.matchedSignals;
     if (previousOverlay === discovery.root && discovery.root) {
       this.#scan();
@@ -658,15 +678,15 @@ export class ZoomAdapter implements PlatformAdapter {
     }
   }
 
-  #emit(state: SegmentState, type: AdapterUtteranceEvent["type"]): void {
-    this.#onEvent?.({
-      type,
-      utteranceId: state.id,
-      revision: state.revision,
-      speaker: state.speaker,
-      text: state.text,
-      observedAt: new Date().toISOString(),
-    });
+  #emit(state: SegmentState, type: "upsert" | "finalize"): void {
+    this.#onEvent?.(
+      captionEvidence(this.platform, type, {
+        utteranceId: state.id,
+        revision: state.revision,
+        speaker: state.speaker,
+        text: state.text,
+      }),
+    );
   }
 
   #publishStatus(

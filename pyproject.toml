@@ -29,6 +29,7 @@ dependencies = [
   "platformdirs>=4.3,<5",
   "pillow>=11.3,<13",
   "psutil>=7.0,<8",
+  "pyobjc-framework-ApplicationServices>=11,<13; sys_platform == 'darwin'",
   "pydantic>=2.11,<3",
   "sqlalchemy>=2.0,<3",
   "sherpa-onnx==1.13.3",
@@ -53,6 +54,7 @@ dev = [
 elsewise = "elsewise.cli:main"
 elsewise-gui = "elsewise.launcher.app:main"
 elsewise-server = "elsewise.runtime.server_runner:main"
+elsewise-a11y-dump = "elsewise.accessibility.cli:main"
 
 [project.urls]
 Homepage = "https://github.com/btw-team/elsewise"

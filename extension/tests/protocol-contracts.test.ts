@@ -3,7 +3,6 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { MAX_CAPTION_TEXT_LENGTH } from "../src/protocol/limits";
 import type { ProtocolMessageType } from "../src/protocol/models";
 import { validateProtocolMessage } from "../src/protocol/validators";
 
@@ -32,16 +31,16 @@ describe("protocol contract parity", () => {
     });
   }
 
-  it("rejects caption text beyond the hard limit", () => {
+  it("rejects evidence payloads beyond the hard field limit", () => {
     const payload = JSON.parse(
       readFileSync(
-        `${protocolRoot}/fixtures/valid/caption.upsert.json`,
+        `${protocolRoot}/fixtures/valid/evidence.emit.json`,
         "utf8",
       ),
     ) as Record<string, unknown>;
-    payload.text = "x".repeat(MAX_CAPTION_TEXT_LENGTH + 1);
-    expect(validateProtocolMessage("caption.upsert", payload).valid).toBe(
-      false,
+    payload.payload = Object.fromEntries(
+      Array.from({ length: 65 }, (_, index) => [`field-${index}`, index]),
     );
+    expect(validateProtocolMessage("evidence.emit", payload).valid).toBe(false);
   });
 });

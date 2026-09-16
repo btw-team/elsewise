@@ -1,10 +1,11 @@
 import { sanitizeSubtree, sanitizeUrl } from "../content/diagnostics";
+import { captionEvidence, emptySnapshot } from "./base";
 import type {
   AdapterStatus,
-  AdapterUtteranceEvent,
+  AdapterEvidenceEvent,
   DiagnosticBundle,
-  DiscoveryResult,
-  PlatformAdapter,
+  DetectionResult,
+  SemanticAdapter,
 } from "./base";
 
 const extensionVersion = __EXTENSION_VERSION__;
@@ -125,7 +126,7 @@ function extractSegments(root: Element): ExtractedSegment[] {
   );
 }
 
-export class MicrosoftTeamsAdapter implements PlatformAdapter {
+export class MicrosoftTeamsAdapter implements SemanticAdapter {
   readonly platform = "microsoft_teams" as const;
   readonly #document: Document;
   readonly #documentIdentity = crypto.randomUUID().slice(0, 8);
@@ -137,7 +138,7 @@ export class MicrosoftTeamsAdapter implements PlatformAdapter {
   #signals: string[] = [];
   #mutations: string[] = [];
   #scanQueued = false;
-  #onEvent: ((event: AdapterUtteranceEvent) => void) | null = null;
+  #onEvent: ((event: AdapterEvidenceEvent) => void) | null = null;
   #onStatus: ((status: AdapterStatus) => void) | null = null;
 
   constructor(document: Document) {
@@ -152,7 +153,26 @@ export class MicrosoftTeamsAdapter implements PlatformAdapter {
     );
   }
 
-  discover(document: Document): DiscoveryResult {
+  capabilities() {
+    return new Set(["captions"] as const);
+  }
+
+  snapshot() {
+    const snapshot = emptySnapshot(this.#root !== null);
+    snapshot.participants = [...new Set([...this.#segments.values()].map((item) => item.speaker))]
+      .filter((name): name is string => name !== null)
+      .map((displayLabel) => ({
+        id: displayLabel,
+        displayLabel,
+        self: false,
+        activeSpeaker: false,
+        muted: null,
+        handRaised: null,
+      }));
+    return snapshot;
+  }
+
+  detect(document: Document): DetectionResult {
     const root = document.querySelector(ROOT_SELECTOR);
     const matchedSignals: string[] = [];
     if (root) matchedSignals.push("closed-caption renderer data-tid");
@@ -172,7 +192,7 @@ export class MicrosoftTeamsAdapter implements PlatformAdapter {
   }
 
   start(
-    onEvent: (event: AdapterUtteranceEvent) => void,
+    onEvent: (event: AdapterEvidenceEvent) => void,
     onStatus: (status: AdapterStatus) => void,
   ): void {
     this.stop();
@@ -222,7 +242,7 @@ export class MicrosoftTeamsAdapter implements PlatformAdapter {
 
   #rediscover(): void {
     const previousRoot = this.#root;
-    const discovery = this.discover(this.#document);
+    const discovery = this.detect(this.#document);
     this.#signals = discovery.matchedSignals;
     if (previousRoot === discovery.root && discovery.root) {
       this.#scan();
@@ -342,15 +362,15 @@ export class MicrosoftTeamsAdapter implements PlatformAdapter {
     this.#emit(state, "finalize");
   }
 
-  #emit(state: SegmentState, type: AdapterUtteranceEvent["type"]): void {
-    this.#onEvent?.({
-      type,
-      utteranceId: state.id,
-      revision: state.revision,
-      speaker: state.speaker,
-      text: state.text,
-      observedAt: new Date().toISOString(),
-    });
+  #emit(state: SegmentState, type: "upsert" | "finalize"): void {
+    this.#onEvent?.(
+      captionEvidence(this.platform, type, {
+        utteranceId: state.id,
+        revision: state.revision,
+        speaker: state.speaker,
+        text: state.text,
+      }),
+    );
   }
 
   #publishStatus(

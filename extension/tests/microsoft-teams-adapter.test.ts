@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AdapterStatus,
-  AdapterUtteranceEvent,
+  AdapterEvidenceEvent,
 } from "../src/adapters/base";
 import { MicrosoftTeamsAdapter } from "../src/adapters/microsoft-teams";
 
@@ -52,7 +52,7 @@ describe("Microsoft Teams adapter", () => {
       (status) => statuses.push(status),
     );
     expect(statuses.at(-1)?.captionsStatus).toBe("off");
-    expect(adapter.discover(document).root).toBeNull();
+    expect(adapter.detect(document).root).toBeNull();
     adapter.stop();
 
     load("captions-on-empty.html");
@@ -71,7 +71,7 @@ describe("Microsoft Teams adapter", () => {
 
   it("treats pause-separated fields as distinct utterances", () => {
     load("paused-utterances.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -87,7 +87,7 @@ describe("Microsoft Teams adapter", () => {
 
   it("replaces the full text for append, correction, and retraction revisions", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -112,7 +112,7 @@ describe("Microsoft Teams adapter", () => {
 
   it("captures a changed speaker directly and finalizes virtual-list eviction", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -141,7 +141,7 @@ describe("Microsoft Teams adapter", () => {
     author.textContent = "Unknown User";
     text.textContent =
       "Ну мы пытаемся понять перестановки предметов в комате и перегенерировать их в 3 д";
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -180,7 +180,7 @@ describe("Microsoft Teams adapter", () => {
     if (!author || !text) throw new Error("caption fields missing");
     author.textContent = "Unknown User";
     text.textContent = "The first participant finishes a thought.";
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -205,7 +205,7 @@ describe("Microsoft Teams adapter", () => {
 
   it("reconciles temporary reinsertion without duplicate or finalize", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -225,7 +225,7 @@ describe("Microsoft Teams adapter", () => {
 
   it("finalizes on captions off and rediscovers a fresh empty root", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const statuses: AdapterStatus[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
@@ -251,7 +251,7 @@ describe("Microsoft Teams adapter", () => {
 
   it("uses the same extraction in Speaker layout and redacts diagnostics", () => {
     load("speaker-layout.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -276,7 +276,7 @@ describe("Microsoft Teams adapter", () => {
   it("keeps short pauses partial and conservatively finalizes after 60 seconds", () => {
     vi.useFakeTimers();
     load("speaker-layout.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),

@@ -8,13 +8,14 @@ from fastapi import WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 
 from elsewise.api.security import safe_extension_origin
+from elsewise.evidence import EvidenceBus
 from elsewise.observability import RuntimeDiagnostics, log_event
 from elsewise.persistence.database import Database
 from elsewise.persistence.models import SessionRecord
 from elsewise.protocol.models import (
-    CaptionFinalize,
-    CaptionUpsert,
+    PROTOCOL_VERSION,
     ClientHello,
+    EvidenceEmit,
     SourceCommandAck,
     SourceDiscovered,
     SourceHealth,
@@ -31,7 +32,7 @@ from elsewise.settings.limits import (
 )
 from elsewise.sources.connections import BrowserConnectionRegistry
 from elsewise.sources.manager import SourceManager
-from elsewise.sources.projectors.captions import CaptionProjector
+from elsewise.sources.projectors.evidence import EvidenceProjector
 
 
 def _error(
@@ -45,7 +46,7 @@ def _error(
     log_event("protocol.rejected", reason=code, recoverable=recoverable)
     return {
         "type": "protocol.error",
-        "protocol_version": 2,
+        "protocol_version": PROTOCOL_VERSION,
         "code": code,
         "message": message,
         "recoverable": recoverable,
@@ -76,7 +77,11 @@ async def ingest_websocket(websocket: WebSocket) -> None:
     pairing = cast(PairingService, websocket.app.state.pairing)
     sources = cast(SourceManager, websocket.app.state.source_manager)
     connections = cast(BrowserConnectionRegistry, websocket.app.state.browser_connections)
-    projector = CaptionProjector(database, cast(SettingsStore, websocket.app.state.settings))
+    projector = EvidenceProjector(
+        database,
+        cast(EvidenceBus, websocket.app.state.evidence_bus),
+        cast(SettingsStore, websocket.app.state.settings),
+    )
     paired_client_id = ""
     connection_id = ""
     credential = ""
@@ -94,11 +99,14 @@ async def ingest_websocket(websocket: WebSocket) -> None:
             hello_value = json.loads(raw)
         except json.JSONDecodeError:
             hello_value = None
-        if isinstance(hello_value, dict) and hello_value.get("protocol_version") != 2:
+        if (
+            isinstance(hello_value, dict)
+            and hello_value.get("protocol_version") != PROTOCOL_VERSION
+        ):
             await websocket.send_json(
                 _error(
                     "incompatible_protocol",
-                    "Protocol version 2 is required.",
+                    f"Protocol version {PROTOCOL_VERSION} is required.",
                     recoverable=False,
                 )
             )
@@ -141,7 +149,7 @@ async def ingest_websocket(websocket: WebSocket) -> None:
         await websocket.send_json(
             {
                 "type": "server.hello",
-                "protocol_version": 2,
+                "protocol_version": PROTOCOL_VERSION,
                 "capabilities": [
                     "pairing_requests",
                     "daemon_source_control",
@@ -194,7 +202,7 @@ async def ingest_websocket(websocket: WebSocket) -> None:
                 await websocket.send_json(
                     {
                         "type": "heartbeat.ack",
-                        "protocol_version": 2,
+                        "protocol_version": PROTOCOL_VERSION,
                         "session": session_payload(current) if current else None,
                     }
                 )
@@ -222,7 +230,7 @@ async def ingest_websocket(websocket: WebSocket) -> None:
                 await websocket.send_json(
                     _error(
                         "invalid_message",
-                        "The message does not match protocol v2.",
+                        f"The message does not match protocol v{PROTOCOL_VERSION}.",
                         recoverable=False,
                         event_id=event_id,
                         client_seq=client_seq,
@@ -244,7 +252,7 @@ async def ingest_websocket(websocket: WebSocket) -> None:
                     details = {"source_id": source_id, "source_epoch_id": epoch_id}
             elif isinstance(message, SourceHealth):
                 ack_result = sources.update_health(message, paired_client_id=paired_client_id)
-            elif isinstance(message, (CaptionUpsert, CaptionFinalize)):
+            elif isinstance(message, EvidenceEmit):
                 ack_result = projector.process(message)
             elif isinstance(message, SourceCommandAck):
                 connections.acknowledge(str(message.command_id), message.model_dump(mode="json"))
@@ -264,7 +272,7 @@ async def ingest_websocket(websocket: WebSocket) -> None:
             await websocket.send_json(
                 {
                     "type": "event.ack",
-                    "protocol_version": 2,
+                    "protocol_version": PROTOCOL_VERSION,
                     "event_id": str(message.event_id),
                     "client_seq": message.client_seq,
                     "result": ack_result,

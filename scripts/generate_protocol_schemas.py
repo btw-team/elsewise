@@ -4,10 +4,9 @@ import json
 from pathlib import Path
 
 from elsewise.protocol.models import (
-    CaptionFinalize,
-    CaptionUpsert,
     ClientHello,
     EventAck,
+    EvidenceEmit,
     Heartbeat,
     HeartbeatAck,
     PairingApproved,
@@ -47,8 +46,7 @@ SCHEMAS = {
     "source.start": SourceStart,
     "source.stop": SourceStop,
     "source.command_ack": SourceCommandAck,
-    "caption.upsert": CaptionUpsert,
-    "caption.finalize": CaptionFinalize,
+    "evidence.emit": EvidenceEmit,
     "event.ack": EventAck,
     "ui.event": UiEvent,
     "protocol.error": ProtocolError,
@@ -61,7 +59,7 @@ def main() -> None:
         path.unlink()
     for message_type, model in SCHEMAS.items():
         schema = model.model_json_schema(mode="validation")
-        schema["$id"] = f"https://elsewise.local/protocol/v2/{message_type}.schema.json"
+        schema["$id"] = f"https://elsewise.local/protocol/v3/{message_type}.schema.json"
         path = ROOT / f"{message_type}.schema.json"
         path.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

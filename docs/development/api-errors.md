@@ -40,6 +40,7 @@ DE, and PT-BR; an unknown code appears in a localized fallback.
 | 403  | `invalid_origin`                 | The request violates the loopback origin policy.         |
 | 422  | `invalid_session_id`             | The session identifier is malformed.                     |
 | 422  | `invalid_settings`               | The combined global settings are invalid.                |
+| 422  | `invalid_speaker_profile`        | The speaker profile name or aliases are invalid.         |
 | 422  | `invalid_source_configuration`   | A Session must keep at least one capture lane enabled.    |
 | 422  | `invalid_source_id`              | The native source identifier is malformed.               |
 | 422  | `invalid_source_role`            | The requested source role is unknown.                    |
@@ -56,6 +57,7 @@ DE, and PT-BR; an unknown code appears in a localized fallback.
 | 500  | `request_failed`                 | An HTTP failure has no more specific stable code.        |
 | 422  | `request_validation_error`       | Request path, query, or body validation failed.          |
 | 500  | `segment_missing`                | A running session has no active capture segment.         |
+| 409  | `speaker_enrollment_unavailable` | Voice enrollment is not calibrated yet.                  |
 | 409  | `session_already_started`        | First-start-only session fields are locked.              |
 | 404  | `session_not_found`              | The requested session does not exist.                    |
 | 409  | `session_not_running`            | The operation requires a running session.                |

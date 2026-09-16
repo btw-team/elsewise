@@ -1,12 +1,15 @@
 from typing import Any
 
 from elsewise.persistence.models import (
+    ActivityParticipantRecord,
+    ActivityRecord,
     CaptureSourceRecord,
     RecordingSegmentRecord,
     UiEventRecord,
     UtteranceRecord,
     UtteranceSpeakerAssignmentRecord,
 )
+from elsewise.protocol.models import PROTOCOL_VERSION
 
 
 def segment_payload(record: RecordingSegmentRecord) -> dict[str, Any]:
@@ -64,6 +67,9 @@ def utterance_payload(
         "revision": record.revision,
         "speaker": assignment.display_label if assignment else None,
         "speaker_role": assignment.speaker_role if assignment else "unknown",
+        "speaker_profile_id": assignment.speaker_profile_id if assignment else None,
+        "speaker_assignment_revision": assignment.revision if assignment else None,
+        "speaker_assignment_provenance": assignment.provenance if assignment else None,
         "text": record.text,
         "final": record.final,
         "first_session_offset_us": record.first_session_offset_us,
@@ -82,10 +88,40 @@ def utterance_payload(
     }
 
 
+def activity_payload(record: ActivityRecord) -> dict[str, Any]:
+    return {
+        "id": record.id,
+        "session_id": record.session_id,
+        "state": record.state,
+        "started_offset_us": record.started_offset_us,
+        "ended_offset_us": record.ended_offset_us,
+        "confidence": record.confidence,
+        "provenance": record.provenance,
+        "presentation_state": record.presentation_state,
+        "recording_state": record.recording_state,
+        "updated_at": record.updated_at.isoformat(),
+    }
+
+
+def participant_payload(record: ActivityParticipantRecord) -> dict[str, Any]:
+    return {
+        "id": record.id,
+        "display_label": record.display_label,
+        "is_self": record.is_self,
+        "presence_state": record.presence_state,
+        "muted": record.muted,
+        "hand_raised": record.hand_raised,
+        "confidence": record.confidence,
+        "provenance": record.provenance,
+        "last_observed_offset_us": record.last_observed_offset_us,
+        "updated_at": record.updated_at.isoformat(),
+    }
+
+
 def ui_event_payload(record: UiEventRecord) -> dict[str, Any]:
     return {
         "type": "ui.event",
-        "protocol_version": 2,
+        "protocol_version": PROTOCOL_VERSION,
         "event_id": record.id,
         "event_type": record.event_type,
         "aggregate_id": record.aggregate_id,

@@ -12,14 +12,14 @@ from elsewise.persistence.models import (
     SourceEpochRecord,
     UtteranceRecord,
 )
-from elsewise.protocol.models import CaptionFinalize, CaptionUpsert, SourceDiscovered
+from elsewise.protocol.models import EvidenceEmit, SourceDiscovered
 from elsewise.services.session_controller import SessionController
 from elsewise.services.sessions import SessionService
 from elsewise.services.transitions import TransitionExecutor
 from elsewise.sources.connections import BrowserConnectionRegistry
 from elsewise.sources.contracts import SourceCategory, SourceDescriptor, SourceRole
 from elsewise.sources.manager import SourceManager
-from elsewise.sources.projectors.captions import CaptionProjector
+from elsewise.sources.projectors.evidence import EvidenceProjector
 from sqlalchemy import select
 
 
@@ -51,15 +51,15 @@ def discovered(
     return SourceDiscovered.model_validate(
         {
             "type": "source.discovered",
-            "protocol_version": 2,
+            "protocol_version": 3,
             "event_id": str(uuid4()),
             "client_seq": 1,
             "tab_instance_id": tab,
             "producer_epoch_id": producer,
             "platform": "synthetic",
             "activity_key": activity,
-            "driver_id": "synthetic_captions",
-            "driver_version": "2",
+            "driver_id": "synthetic_semantic",
+            "driver_version": "3",
             "capabilities": [
                 "captions",
                 "daemon_source_control",
@@ -306,34 +306,41 @@ def test_source_clock_mapping_accepts_only_pre_boundary_evidence(tmp_path: Path)
         record.monotonic_origin_ns = 1_000_000
 
     daemon_time = 1_010
-    projector = CaptionProjector(database, monotonic_us=lambda: daemon_time)
+    projector = EvidenceProjector(database, monotonic_us=lambda: daemon_time)
 
     def evidence(
-        model: type[CaptionUpsert] | type[CaptionFinalize],
+        final: bool,
         *,
         utterance_id: str,
         revision: int,
         source_time_us: int,
-    ) -> CaptionUpsert | CaptionFinalize:
-        return model.model_validate(
+    ) -> EvidenceEmit:
+        return EvidenceEmit.model_validate(
             {
-                "type": "caption.upsert" if model is CaptionUpsert else "caption.finalize",
-                "protocol_version": 2,
+                "type": "evidence.emit",
+                "protocol_version": 3,
                 "event_id": str(uuid4()),
                 "source_id": source_id,
                 "source_epoch_id": epoch_id,
                 "client_seq": revision,
-                "utterance_id": utterance_id,
-                "revision": revision,
-                "text": "caption",
-                "session_offset_us": 999_999,
+                "capability": "captions",
+                "kind": "caption.final" if final else "caption.partial",
+                "interval_start_us": source_time_us,
+                "interval_end_us": source_time_us,
                 "source_time_us": source_time_us,
+                "provenance": "synthetic.dom",
+                "confidence": 1.0,
+                "payload": {
+                    "utterance_id": utterance_id,
+                    "revision": revision,
+                    "text": "caption",
+                },
             }
         )
 
     assert (
         projector.process(
-            evidence(CaptionUpsert, utterance_id="partial", revision=1, source_time_us=10)
+            evidence(False, utterance_id="partial", revision=1, source_time_us=10)
         )
         == "applied"
     )
@@ -346,13 +353,13 @@ def test_source_clock_mapping_accepts_only_pre_boundary_evidence(tmp_path: Path)
     daemon_time = 1_200
     assert (
         projector.process(
-            evidence(CaptionFinalize, utterance_id="partial", revision=2, source_time_us=100)
+            evidence(True, utterance_id="partial", revision=2, source_time_us=100)
         )
         == "applied"
     )
     assert (
         projector.process(
-            evidence(CaptionUpsert, utterance_id="late", revision=1, source_time_us=101)
+            evidence(False, utterance_id="late", revision=1, source_time_us=101)
         )
         == "rejected"
     )
@@ -406,25 +413,34 @@ def test_captions_are_canonical_only_when_native_role_is_unhealthy(tmp_path: Pat
         effective_format={"sample_rate": 16_000, "channels": 1, "format": "f32le"},
         effective_backend="fake:model",
     )
-    projector = CaptionProjector(database)
+    projector = EvidenceProjector(database)
 
-    def caption(revision: int) -> CaptionUpsert:
-        return CaptionUpsert.model_validate(
+    def caption(revision: int) -> EvidenceEmit:
+        source_time_us = revision * 1_000
+        return EvidenceEmit.model_validate(
             {
-                "type": "caption.upsert",
-                "protocol_version": 2,
+                "type": "evidence.emit",
+                "protocol_version": 3,
                 "event_id": str(uuid4()),
                 "source_id": caption_source,
                 "source_epoch_id": caption_epoch,
                 "client_seq": revision,
-                "utterance_id": f"caption-{revision}",
-                "revision": 1,
-                "text": "caption",
-                "session_offset_us": revision * 1_000,
+                "capability": "captions",
+                "kind": "caption.partial",
+                "interval_start_us": source_time_us,
+                "interval_end_us": source_time_us,
+                "source_time_us": source_time_us,
+                "provenance": "synthetic.dom",
+                "confidence": 1.0,
+                "payload": {
+                    "utterance_id": f"caption-{revision}",
+                    "revision": 1,
+                    "text": "caption",
+                },
             }
         )
 
-    assert projector.process(caption(1)) == "secondary_evidence"
+    assert projector.process(caption(1)) == "applied"
     sources.mark_local_epoch_degraded(native_epoch, error_code="asr_failed", terminal=False)
     assert projector.process(caption(2)) == "applied"
     with database.transaction() as db:

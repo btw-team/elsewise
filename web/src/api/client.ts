@@ -13,6 +13,7 @@ import type {
   AgentHistoryPage,
   Utterance,
   AudioSourceInventory,
+  SpeakerProfile,
 } from "../types";
 
 export class ApiError extends Error {
@@ -153,6 +154,30 @@ export const api = {
       method: "POST",
     }),
   settings: () => request<GlobalSettings>("/api/settings"),
+  speakerProfiles: () => request<SpeakerProfile[]>("/api/speaker-profiles"),
+  createSpeakerProfile: (displayName: string) =>
+    request<SpeakerProfile>("/api/speaker-profiles", {
+      method: "POST",
+      body: JSON.stringify({ display_name: displayName, aliases: [] }),
+    }),
+  renameSpeakerProfile: (profileId: string, displayName: string) =>
+    request<SpeakerProfile>(`/api/speaker-profiles/${profileId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ display_name: displayName }),
+    }),
+  deleteSpeakerProfile: (profileId: string) =>
+    request<void>(`/api/speaker-profiles/${profileId}`, { method: "DELETE" }),
+  assignSpeaker: (
+    utteranceId: string,
+    assignment: { profile_id?: string; clear?: boolean },
+  ) =>
+    request<{ utterance: Utterance; updated_count: number }>(
+      `/api/utterances/${utteranceId}/speaker`,
+      {
+        method: "PATCH",
+        body: JSON.stringify(assignment),
+      },
+    ),
   updateSettings: (body: Partial<GlobalSettings>) =>
     request<GlobalSettings>("/api/settings", {
       method: "PATCH",

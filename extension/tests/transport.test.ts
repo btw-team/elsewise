@@ -42,16 +42,21 @@ class FakeSocket {
 }
 
 const bufferedEvent: BufferedEvent = {
-  type: "caption.upsert",
-  protocol_version: 2,
+  type: "evidence.emit",
+  protocol_version: 3,
   event_id: "00000000-0000-4000-8000-000000000001",
   source_id: "source",
   client_seq: 1,
   source_epoch_id: "epoch",
-  utterance_id: "utterance-1",
-  revision: 1,
-  text: "hello",
-  session_offset_us: 1,
+  capability: "captions",
+  kind: "caption.partial",
+  interval_start_us: 1,
+  interval_end_us: 1,
+  source_time_us: 1,
+  timing_uncertainty_us: 0,
+  provenance: "synthetic.dom",
+  confidence: 1,
+  payload: { utterance_id: "utterance-1", revision: 1, text: "hello" },
 };
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -78,7 +83,7 @@ describe("ingest transport", () => {
     await settle();
     expect(firstSocket.sent.map((message) => message.type)).toEqual([
       "client.hello",
-      "caption.upsert",
+      "evidence.emit",
     ]);
     firstSocket.receive({
       type: "event.ack",
@@ -135,8 +140,10 @@ describe("ingest transport", () => {
         ...bufferedEvent,
         event_id: "00000000-0000-4000-8000-000000000002",
         client_seq: 2,
-        utterance_id: "utterance-2",
-        session_offset_us: 2,
+        interval_start_us: 2,
+        interval_end_us: 2,
+        source_time_us: 2,
+        payload: { utterance_id: "utterance-2", revision: 1, text: "hello" },
       },
       "session-1",
     );
@@ -163,14 +170,14 @@ describe("ingest transport", () => {
     await settle();
     expect(socket.sent.map((message) => message.type)).toEqual([
       "client.hello",
-      "caption.upsert",
+      "evidence.emit",
     ]);
 
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 25));
     expect(socket.sent.map((message) => message.type)).toEqual([
       "client.hello",
-      "caption.upsert",
-      "caption.upsert",
+      "evidence.emit",
+      "evidence.emit",
     ]);
     transport.stop();
   });
@@ -196,7 +203,7 @@ describe("ingest transport", () => {
     await settle();
     socket.receive({
       type: "protocol.error",
-      protocol_version: 2,
+      protocol_version: 3,
       event_id: bufferedEvent.event_id,
       client_seq: 1,
       code: "rate_limited",
@@ -208,7 +215,7 @@ describe("ingest transport", () => {
 
     socket.receive({
       type: "protocol.error",
-      protocol_version: 2,
+      protocol_version: 3,
       event_id: bufferedEvent.event_id,
       client_seq: 1,
       code: "invalid_message",

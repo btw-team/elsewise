@@ -8,6 +8,7 @@ import clientHelloSchema from "../../../protocol/schemas/client.hello.schema.jso
 import heartbeatAckSchema from "../../../protocol/schemas/heartbeat.ack.schema.json";
 import heartbeatSchema from "../../../protocol/schemas/heartbeat.schema.json";
 import eventAckSchema from "../../../protocol/schemas/event.ack.schema.json";
+import evidenceEmitSchema from "../../../protocol/schemas/evidence.emit.schema.json";
 import pairingApprovedSchema from "../../../protocol/schemas/pairing.approved.schema.json";
 import pairingCancelSchema from "../../../protocol/schemas/pairing.cancel.schema.json";
 import pairingCancelledSchema from "../../../protocol/schemas/pairing.cancelled.schema.json";
@@ -24,8 +25,6 @@ import sourceHealthSchema from "../../../protocol/schemas/source.health.schema.j
 import sourceStartSchema from "../../../protocol/schemas/source.start.schema.json";
 import sourceStopSchema from "../../../protocol/schemas/source.stop.schema.json";
 import uiEventSchema from "../../../protocol/schemas/ui.event.schema.json";
-import captionFinalizeSchema from "../../../protocol/schemas/caption.finalize.schema.json";
-import captionUpsertSchema from "../../../protocol/schemas/caption.upsert.schema.json";
 import type { ProtocolMessageMap, ProtocolMessageType } from "./models";
 
 const ajv = new Ajv2020({ allErrors: true, strict: true });
@@ -48,8 +47,7 @@ const validators: {
   "heartbeat.ack": ajv.compile<HeartbeatAck>(heartbeatAckSchema),
   "source.discovered": ajv.compile<SourceDiscovered>(sourceDiscoveredSchema),
   "source.health": ajv.compile<SourceHealth>(sourceHealthSchema),
-  "caption.upsert": ajv.compile<CaptionUpsert>(captionUpsertSchema),
-  "caption.finalize": ajv.compile<CaptionFinalize>(captionFinalizeSchema),
+  "evidence.emit": ajv.compile<EvidenceEmit>(evidenceEmitSchema),
   "event.ack": ajv.compile<EventAck>(eventAckSchema),
   "source.start": ajv.compile<SourceCommand>(sourceStartSchema),
   "source.stop": ajv.compile<SourceCommand>(sourceStopSchema),
@@ -72,8 +70,7 @@ type Heartbeat = ProtocolMessageMap["heartbeat"];
 type HeartbeatAck = ProtocolMessageMap["heartbeat.ack"];
 type SourceDiscovered = ProtocolMessageMap["source.discovered"];
 type SourceHealth = ProtocolMessageMap["source.health"];
-type CaptionUpsert = ProtocolMessageMap["caption.upsert"];
-type CaptionFinalize = ProtocolMessageMap["caption.finalize"];
+type EvidenceEmit = ProtocolMessageMap["evidence.emit"];
 type EventAck = ProtocolMessageMap["event.ack"];
 type SourceCommand = ProtocolMessageMap["source.start"];
 type SourceCommandAck = ProtocolMessageMap["source.command_ack"];
@@ -93,6 +90,15 @@ export function validateProtocolMessage<Type extends ProtocolMessageType>(
   const validate = validators[type] as ValidateFunction<
     ProtocolMessageMap[Type]
   >;
-  if (validate(value)) return { valid: true, message: value, errors: [] };
+  if (validate(value)) {
+    if (
+      type === "evidence.emit" &&
+      (value as EvidenceEmit).interval_end_us <
+        (value as EvidenceEmit).interval_start_us
+    ) {
+      return { valid: false, errors: [] };
+    }
+    return { valid: true, message: value, errors: [] };
+  }
   return { valid: false, errors: validate.errors ?? [] };
 }

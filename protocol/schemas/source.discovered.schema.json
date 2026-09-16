@@ -1,5 +1,5 @@
 {
-  "$id": "https://elsewise.local/protocol/v2/source.discovered.schema.json",
+  "$id": "https://elsewise.local/protocol/v3/source.discovered.schema.json",
   "additionalProperties": false,
   "properties": {
     "activity_key": {
@@ -31,7 +31,7 @@
       "type": "integer"
     },
     "driver_id": {
-      "default": "browser_captions",
+      "default": "browser_semantic",
       "maxLength": 128,
       "minLength": 1,
       "title": "Driver Id",
@@ -62,7 +62,13 @@
       "type": "string"
     },
     "health_status": {
-      "enum": ["available", "waiting", "degraded", "unavailable", "failed"],
+      "enum": [
+        "available",
+        "waiting",
+        "degraded",
+        "unavailable",
+        "failed"
+      ],
       "title": "Health Status",
       "type": "string"
     },
@@ -72,7 +78,12 @@
       "type": "string"
     },
     "platform": {
-      "enum": ["google_meet", "microsoft_teams", "zoom", "synthetic"],
+      "enum": [
+        "google_meet",
+        "microsoft_teams",
+        "zoom",
+        "synthetic"
+      ],
       "title": "Platform",
       "type": "string"
     },
@@ -83,7 +94,7 @@
       "type": "string"
     },
     "protocol_version": {
-      "const": 2,
+      "const": 3,
       "title": "Protocol Version",
       "type": "integer"
     },

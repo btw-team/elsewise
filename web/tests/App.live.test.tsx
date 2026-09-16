@@ -21,6 +21,62 @@ import {
 installAppTestHarness();
 
 describe("App live", () => {
+  it("assigns and clears a saved speaker profile without changing transcript text", async () => {
+    const defaultFetch = vi.mocked(fetch).getMockImplementation();
+    vi.mocked(fetch).mockImplementation(async (input, options) => {
+      const path = String(input);
+      if (path.endsWith("/api/speaker-profiles")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            {
+              id: "profile-1",
+              display_name: "Alice",
+              aliases: [],
+              prototype_count: 0,
+            },
+          ],
+        } as Response;
+      }
+      if (path.endsWith("/api/utterances/utterance-1/speaker")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({ utterance: snapshot.utterances[0], updated_count: 1 }),
+        } as Response;
+      }
+      if (!defaultFetch) throw new Error("Missing default fetch test implementation");
+      return defaultFetch(input, options);
+    });
+
+    render(<App />);
+    await screen.findByRole("option", { name: "Alice" });
+    fireEvent.change(screen.getByLabelText("Speaker identity"), {
+      target: { value: "profile-1" },
+    });
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/utterances/utterance-1/speaker",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ profile_id: "profile-1" }),
+        }),
+      ),
+    );
+    fireEvent.click(document.querySelector(".speaker-assignment-clear") as HTMLElement);
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        "/api/utterances/utterance-1/speaker",
+        expect.objectContaining({
+          method: "PATCH",
+          body: JSON.stringify({ clear: true }),
+        }),
+      ),
+    );
+    expect(screen.getByText(/Safe transcript/)).toBeInTheDocument();
+  });
+
   it("applies simple live deltas without requesting another snapshot", async () => {
     render(<App />);
     await screen.findByText(/Safe transcript/);
@@ -31,7 +87,7 @@ describe("App live", () => {
       ).length;
     FakeWebSocket.instances.at(-1)?.receive({
       type: "ui.event",
-      protocol_version: 2,
+      protocol_version: 3,
       event_id: 5,
       event_type: "utterance.created",
       aggregate_id: "utterance-2",
@@ -58,7 +114,7 @@ describe("App live", () => {
     await screen.findByText(/Safe transcript/);
     FakeWebSocket.instances.at(-1)?.receive({
       type: "ui.event",
-      protocol_version: 2,
+      protocol_version: 3,
       event_id: 5,
       event_type: "utterance.created",
       aggregate_id: "utterance-earlier",
@@ -97,7 +153,7 @@ describe("App live", () => {
 
     FakeWebSocket.instances.at(-1)?.receive({
       type: "ui.event",
-      protocol_version: 2,
+      protocol_version: 3,
       event_id: 5,
       event_type: "utterance.created",
       aggregate_id: payload.id,

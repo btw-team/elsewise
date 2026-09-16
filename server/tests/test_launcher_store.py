@@ -14,7 +14,7 @@ def test_launcher_store_projects_lanes_without_gui_toolkit() -> None:
                     "binding_state": "degraded",
                     "requested_mode": "auto",
                     "effective_mode": "captions",
-                    "source_kind": "browser_captions",
+                    "source_kind": "browser_semantic",
                     "health_status": "degraded",
                     "connected": True,
                     "reason": "fallback_activated",

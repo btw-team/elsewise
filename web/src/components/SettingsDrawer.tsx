@@ -19,6 +19,7 @@ import type {
   GlobalSettings,
   PairedClient,
   PairingRequest,
+  SpeakerProfile,
   SupportedLanguage,
 } from "../types";
 import type { UiTheme } from "../theme";
@@ -90,6 +91,10 @@ export function SettingsDrawer({
   const [pairedClients, setPairedClients] = useState<PairedClient[]>([]);
   const [clientNames, setClientNames] = useState<Record<string, string>>({});
   const [pairingBusy, setPairingBusy] = useState(false);
+  const [speakerProfiles, setSpeakerProfiles] = useState<SpeakerProfile[]>([]);
+  const [speakerProfileNames, setSpeakerProfileNames] = useState<Record<string, string>>({});
+  const [newSpeakerProfile, setNewSpeakerProfile] = useState("");
+  const [speakerProfilesBusy, setSpeakerProfilesBusy] = useState(false);
   const [resettingInitialPrompts, setResettingInitialPrompts] = useState(false);
 
   useEffect(() => {
@@ -108,6 +113,18 @@ export function SettingsDrawer({
         setClientNames(
           Object.fromEntries(
             clients.map((client) => [client.id, client.display_name]),
+          ),
+        );
+      })
+      .catch((caught: unknown) => onError(apiErrorMessage(caught, t)));
+    void api
+      .speakerProfiles()
+      .then((profiles) => {
+        const validProfiles = Array.isArray(profiles) ? profiles : [];
+        setSpeakerProfiles(validProfiles);
+        setSpeakerProfileNames(
+          Object.fromEntries(
+            validProfiles.map((profile) => [profile.id, profile.display_name]),
           ),
         );
       })
@@ -264,6 +281,59 @@ export function SettingsDrawer({
       onSuccess(t("settingsSaved"));
     } catch (caught) {
       onError(apiErrorMessage(caught, t));
+    }
+  }
+
+  async function createSpeakerProfile(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const displayName = newSpeakerProfile.trim();
+    if (!displayName) return;
+    setSpeakerProfilesBusy(true);
+    try {
+      const created = await api.createSpeakerProfile(displayName);
+      setSpeakerProfiles((current) => [...current, created]);
+      setSpeakerProfileNames((current) => ({
+        ...current,
+        [created.id]: created.display_name,
+      }));
+      setNewSpeakerProfile("");
+      onSuccess(t("settingsSaved"));
+    } catch (caught) {
+      onError(apiErrorMessage(caught, t));
+    } finally {
+      setSpeakerProfilesBusy(false);
+    }
+  }
+
+  async function renameSpeakerProfile(profileId: string) {
+    const displayName = speakerProfileNames[profileId]?.trim();
+    if (!displayName) return;
+    setSpeakerProfilesBusy(true);
+    try {
+      const updated = await api.renameSpeakerProfile(profileId, displayName);
+      setSpeakerProfiles((current) =>
+        current.map((profile) => (profile.id === profileId ? updated : profile)),
+      );
+      onSuccess(t("settingsSaved"));
+    } catch (caught) {
+      onError(apiErrorMessage(caught, t));
+    } finally {
+      setSpeakerProfilesBusy(false);
+    }
+  }
+
+  async function deleteSpeakerProfile(profileId: string) {
+    setSpeakerProfilesBusy(true);
+    try {
+      await api.deleteSpeakerProfile(profileId);
+      setSpeakerProfiles((current) =>
+        current.filter((profile) => profile.id !== profileId),
+      );
+      onSuccess(t("settingsSaved"));
+    } catch (caught) {
+      onError(apiErrorMessage(caught, t));
+    } finally {
+      setSpeakerProfilesBusy(false);
     }
   }
 
@@ -583,6 +653,54 @@ export function SettingsDrawer({
                 {t("save")}
               </button>
             </form>
+            <section className="speaker-identity-settings">
+              <h3>{t("speakerIdentity")}</h3>
+              <form
+                className="speaker-profile-create"
+                onSubmit={(event) => void createSpeakerProfile(event)}
+              >
+                <input
+                  aria-label={t("title")}
+                  value={newSpeakerProfile}
+                  onChange={(event) => setNewSpeakerProfile(event.target.value)}
+                  maxLength={512}
+                />
+                <button disabled={speakerProfilesBusy || !newSpeakerProfile.trim()}>
+                  {t("add")}
+                </button>
+              </form>
+              <div className="speaker-profile-list">
+                {speakerProfiles.map((profile) => (
+                  <div className="speaker-profile-row" key={profile.id}>
+                    <input
+                      aria-label={t("title")}
+                      value={speakerProfileNames[profile.id] ?? profile.display_name}
+                      onChange={(event) =>
+                        setSpeakerProfileNames((current) => ({
+                          ...current,
+                          [profile.id]: event.target.value,
+                        }))
+                      }
+                      maxLength={512}
+                    />
+                    <button
+                      type="button"
+                      disabled={speakerProfilesBusy}
+                      onClick={() => void renameSpeakerProfile(profile.id)}
+                    >
+                      {t("save")}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={speakerProfilesBusy}
+                      onClick={() => void deleteSpeakerProfile(profile.id)}
+                    >
+                      {t("delete")}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
             <form onSubmit={(event) => void saveGlobal(event)}>
               <h3>{t("globalPrompts")}</h3>
               <label>

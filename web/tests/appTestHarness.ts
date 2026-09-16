@@ -78,6 +78,9 @@ export const snapshot: TestSnapshot = {
       revision: 2,
       speaker: "Speaker A",
       speaker_role: "self",
+      speaker_profile_id: null,
+      speaker_assignment_revision: 1,
+      speaker_assignment_provenance: "audio.topology",
       text: '<img src=x onerror="alert(1)"> Safe transcript',
       final: false,
       first_session_offset_us: 60_000_000,
@@ -109,13 +112,13 @@ export const snapshot: TestSnapshot = {
     {
       id: "source-1",
       paired_client_id: "client-1",
-      source_kind: "browser_captions",
-      source_category: "captions",
+      source_kind: "browser_semantic",
+      source_category: "semantic",
       source_role: "secondary",
       target_key: null,
       platform: "google_meet",
-      driver_id: "google_meet_captions",
-      driver_version: "1.0.0",
+      driver_id: "browser_semantic",
+      driver_version: "3.0.0",
       tab_instance_id: "tab-1",
       capabilities: ["captions"],
       available: true,
@@ -375,7 +378,8 @@ export function installAppTestHarness(): void {
               agent_path: "/safe/exports/session-1/agent.md",
             }
           : path.endsWith("/api/pairing/requests") ||
-              path.endsWith("/api/paired-clients")
+              path.endsWith("/api/paired-clients") ||
+              path.endsWith("/api/speaker-profiles")
             ? []
             : path.endsWith("/api/agent/providers")
               ? providerHealth

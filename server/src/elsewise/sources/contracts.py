@@ -4,7 +4,6 @@ from enum import StrEnum
 
 class SourceCategory(StrEnum):
     AUDIO = "audio"
-    CAPTIONS = "captions"
     SEMANTIC = "semantic"
     SYNTHETIC = "synthetic"
 

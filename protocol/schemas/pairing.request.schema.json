@@ -1,9 +1,13 @@
 {
-  "$id": "https://elsewise.local/protocol/v2/pairing.request.schema.json",
+  "$id": "https://elsewise.local/protocol/v3/pairing.request.schema.json",
   "additionalProperties": false,
   "properties": {
     "browser_family": {
-      "enum": ["chrome", "firefox"],
+      "enum": [
+        "chrome",
+        "firefox",
+        "safari"
+      ],
       "title": "Browser Family",
       "type": "string"
     },
@@ -31,7 +35,7 @@
       "type": "string"
     },
     "protocol_version": {
-      "const": 2,
+      "const": 3,
       "title": "Protocol Version",
       "type": "integer"
     },

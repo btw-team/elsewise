@@ -1,5 +1,5 @@
 {
-  "$id": "https://elsewise.local/protocol/v2/source.command_ack.schema.json",
+  "$id": "https://elsewise.local/protocol/v3/source.command_ack.schema.json",
   "additionalProperties": false,
   "properties": {
     "command_id": {
@@ -21,12 +21,16 @@
       "title": "Error Code"
     },
     "protocol_version": {
-      "const": 2,
+      "const": 3,
       "title": "Protocol Version",
       "type": "integer"
     },
     "result": {
-      "enum": ["started", "finalized", "failed"],
+      "enum": [
+        "started",
+        "finalized",
+        "failed"
+      ],
       "title": "Result",
       "type": "string"
     },

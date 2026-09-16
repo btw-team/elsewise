@@ -134,7 +134,7 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint("protocol_version >= 1", name="ck_capture_sources_protocol"),
         sa.CheckConstraint(
-            "source_category IN ('audio', 'captions', 'synthetic')",
+            "source_category IN ('audio', 'semantic', 'synthetic')",
             name="ck_capture_sources_category",
         ),
         sa.CheckConstraint(
@@ -143,14 +143,15 @@ def upgrade() -> None:
         ),
         sa.CheckConstraint(
             "source_kind IN ('native_microphone', 'native_process_audio', "
-            "'native_system_audio', 'browser_captions', 'synthetic_audio')",
+            "'native_system_audio', 'browser_semantic', 'accessibility_macos', "
+            "'accessibility_linux', 'accessibility_windows', 'synthetic_audio')",
             name="ck_capture_sources_kind",
         ),
         sa.CheckConstraint(
-            "(source_kind = 'browser_captions' AND paired_client_id IS NOT NULL "
-            "AND tab_instance_id IS NOT NULL AND source_category = 'captions' "
+            "(source_kind = 'browser_semantic' AND paired_client_id IS NOT NULL "
+            "AND tab_instance_id IS NOT NULL AND source_category = 'semantic' "
             "AND source_role = 'secondary') OR "
-            "(source_kind != 'browser_captions' AND paired_client_id IS NULL "
+            "(source_kind != 'browser_semantic' AND paired_client_id IS NULL "
             "AND tab_instance_id IS NULL)",
             name="ck_capture_sources_identity",
         ),
@@ -464,23 +465,24 @@ def upgrade() -> None:
     op.create_index("ix_agent_runs_session_id", "agent_runs", ["session_id"])
     op.create_index("ix_agent_runs_thread_id", "agent_runs", ["thread_id"])
     op.create_table(
-        "caption_event_tombstones",
+        "evidence_event_tombstones",
         sa.Column("event_id", sa.String(length=36), nullable=False),
         sa.Column("processing_result", sa.String(length=64), nullable=False),
         sa.Column("received_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("event_id"),
     )
     op.create_index(
-        "ix_caption_event_tombstones_received_at",
-        "caption_event_tombstones",
+        "ix_evidence_event_tombstones_received_at",
+        "evidence_event_tombstones",
         ["received_at"],
     )
     op.create_table(
-        "caption_event_diagnostics",
+        "evidence_event_diagnostics",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("event_id", sa.String(length=36), nullable=False),
         sa.Column("source_id", sa.String(length=256), nullable=False),
-        sa.Column("event_type", sa.String(length=64), nullable=False),
+        sa.Column("capability", sa.String(length=64), nullable=False),
+        sa.Column("event_kind", sa.String(length=128), nullable=False),
         sa.Column("processing_result", sa.String(length=64), nullable=False),
         sa.Column("reason_code", sa.String(length=128), nullable=False),
         sa.Column("protocol_version", sa.Integer(), nullable=False),
@@ -489,24 +491,25 @@ def upgrade() -> None:
         sa.UniqueConstraint("event_id"),
     )
     op.create_index(
-        "ix_caption_event_diagnostics_reason_code",
-        "caption_event_diagnostics",
+        "ix_evidence_event_diagnostics_reason_code",
+        "evidence_event_diagnostics",
         ["reason_code"],
     )
     op.create_index(
-        "ix_caption_event_diagnostics_received_at",
-        "caption_event_diagnostics",
+        "ix_evidence_event_diagnostics_received_at",
+        "evidence_event_diagnostics",
         ["received_at"],
     )
     op.create_index(
-        "ix_caption_event_diagnostics_source_id",
-        "caption_event_diagnostics",
+        "ix_evidence_event_diagnostics_source_id",
+        "evidence_event_diagnostics",
         ["source_id"],
     )
     op.create_table(
-        "caption_event_counters",
+        "evidence_event_counters",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("event_type", sa.String(length=64), nullable=False),
+        sa.Column("capability", sa.String(length=64), nullable=False),
+        sa.Column("event_kind", sa.String(length=128), nullable=False),
         sa.Column("processing_result", sa.String(length=64), nullable=False),
         sa.Column("reason_code", sa.String(length=128), nullable=False),
         sa.Column("protocol_version", sa.Integer(), nullable=False),
@@ -515,11 +518,12 @@ def upgrade() -> None:
         sa.Column("last_received_at", sa.DateTime(timezone=True), nullable=False),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
-            "event_type",
+            "capability",
+            "event_kind",
             "processing_result",
             "reason_code",
             "protocol_version",
-            name="uq_caption_event_counter",
+            name="uq_evidence_event_counter",
         ),
     )
     op.create_table(
@@ -580,6 +584,183 @@ def upgrade() -> None:
     op.create_index("ix_utterances_session_id", "utterances", ["session_id"])
     op.create_index("ix_utterances_source_epoch_id", "utterances", ["source_epoch_id"])
     op.create_table(
+        "activities",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("session_id", sa.String(length=36), nullable=False),
+        sa.Column("activity_key_digest", sa.String(length=64), nullable=False),
+        sa.Column("state", sa.String(length=32), nullable=False),
+        sa.Column("started_offset_us", sa.Integer(), nullable=False),
+        sa.Column("ended_offset_us", sa.Integer(), nullable=True),
+        sa.Column("confidence", sa.Float(), nullable=False),
+        sa.Column("provenance", sa.String(length=128), nullable=False),
+        sa.Column("presentation_state", sa.String(length=32), nullable=False),
+        sa.Column("recording_state", sa.String(length=32), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "confidence >= 0 AND confidence <= 1", name="ck_activities_confidence"
+        ),
+        sa.CheckConstraint(
+            "presentation_state IN ('unknown', 'active', 'stopped')",
+            name="ck_activities_presentation_state",
+        ),
+        sa.CheckConstraint(
+            "recording_state IN ('unknown', 'active', 'stopped')",
+            name="ck_activities_recording_state",
+        ),
+        sa.CheckConstraint(
+            "started_offset_us >= 0 AND (ended_offset_us IS NULL OR "
+            "ended_offset_us >= started_offset_us)",
+            name="ck_activities_offsets",
+        ),
+        sa.CheckConstraint(
+            "state IN ('detected', 'running', 'ended')", name="ck_activities_state"
+        ),
+        sa.ForeignKeyConstraint(["session_id"], ["sessions.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_activities_activity_key_digest", "activities", ["activity_key_digest"])
+    op.create_index("ix_activities_session_id", "activities", ["session_id"])
+    op.create_index("ix_activities_state", "activities", ["state"])
+    op.create_table(
+        "activity_source_links",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("activity_id", sa.String(length=36), nullable=False),
+        sa.Column("source_id", sa.String(length=36), nullable=False),
+        sa.Column("first_observed_offset_us", sa.Integer(), nullable=False),
+        sa.Column("last_observed_offset_us", sa.Integer(), nullable=False),
+        sa.Column("confidence", sa.Float(), nullable=False),
+        sa.Column("provenance", sa.String(length=128), nullable=False),
+        sa.ForeignKeyConstraint(["activity_id"], ["activities.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(["source_id"], ["capture_sources.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("activity_id", "source_id", name="uq_activity_source_link"),
+    )
+    op.create_index(
+        "ix_activity_source_links_activity_id", "activity_source_links", ["activity_id"]
+    )
+    op.create_index(
+        "ix_activity_source_links_source_id", "activity_source_links", ["source_id"]
+    )
+    op.create_table(
+        "activity_participants",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("activity_id", sa.String(length=36), nullable=False),
+        sa.Column("identity_digest", sa.String(length=64), nullable=False),
+        sa.Column("display_label", sa.String(length=512), nullable=True),
+        sa.Column("is_self", sa.Boolean(), nullable=False),
+        sa.Column("presence_state", sa.String(length=32), nullable=False),
+        sa.Column("muted", sa.Boolean(), nullable=True),
+        sa.Column("hand_raised", sa.Boolean(), nullable=True),
+        sa.Column("confidence", sa.Float(), nullable=False),
+        sa.Column("provenance", sa.String(length=128), nullable=False),
+        sa.Column("last_observed_offset_us", sa.Integer(), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_activity_participants_confidence",
+        ),
+        sa.CheckConstraint(
+            "last_observed_offset_us >= 0", name="ck_activity_participants_offset"
+        ),
+        sa.CheckConstraint(
+            "presence_state IN ('present', 'left', 'unknown')",
+            name="ck_activity_participants_presence",
+        ),
+        sa.ForeignKeyConstraint(["activity_id"], ["activities.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "activity_id", "identity_digest", name="uq_activity_participant_identity"
+        ),
+    )
+    op.create_index(
+        "ix_activity_participants_activity_id", "activity_participants", ["activity_id"]
+    )
+    op.create_index(
+        "ix_activity_participants_identity_digest",
+        "activity_participants",
+        ["identity_digest"],
+    )
+    op.create_table(
+        "speaker_profiles",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("display_name", sa.String(length=512), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_speaker_profiles_display_name", "speaker_profiles", ["display_name"])
+    op.create_table(
+        "speaker_profile_aliases",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("profile_id", sa.String(length=36), nullable=False),
+        sa.Column("alias", sa.String(length=512), nullable=False),
+        sa.Column("normalized_alias", sa.String(length=512), nullable=False),
+        sa.ForeignKeyConstraint(["profile_id"], ["speaker_profiles.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint("profile_id", "normalized_alias", name="uq_speaker_profile_alias"),
+    )
+    op.create_index(
+        "ix_speaker_profile_aliases_profile_id", "speaker_profile_aliases", ["profile_id"]
+    )
+    op.create_table(
+        "speaker_prototypes",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("profile_id", sa.String(length=36), nullable=False),
+        sa.Column("model_id", sa.String(length=256), nullable=False),
+        sa.Column("model_version", sa.String(length=128), nullable=False),
+        sa.Column("dimensions", sa.Integer(), nullable=False),
+        sa.Column("embedding", sa.LargeBinary(), nullable=False),
+        sa.Column("quality", sa.Float(), nullable=False),
+        sa.Column("speech_duration_ms", sa.Integer(), nullable=False),
+        sa.Column("source_type", sa.String(length=64), nullable=False),
+        sa.Column("consent_provenance", sa.String(length=128), nullable=False),
+        sa.Column("metadata_json", sa.JSON(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint("dimensions > 0", name="ck_speaker_prototypes_dimensions"),
+        sa.CheckConstraint(
+            "quality >= 0 AND quality <= 1", name="ck_speaker_prototypes_quality"
+        ),
+        sa.CheckConstraint(
+            "speech_duration_ms > 0", name="ck_speaker_prototypes_duration"
+        ),
+        sa.ForeignKeyConstraint(["profile_id"], ["speaker_profiles.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_speaker_prototypes_model_id", "speaker_prototypes", ["model_id"])
+    op.create_index(
+        "ix_speaker_prototypes_profile_id", "speaker_prototypes", ["profile_id"]
+    )
+    op.create_table(
+        "speaker_semantic_identities",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("profile_id", sa.String(length=36), nullable=False),
+        sa.Column("identity_kind", sa.String(length=64), nullable=False),
+        sa.Column("identity_digest", sa.String(length=64), nullable=False),
+        sa.Column("confidence", sa.Float(), nullable=False),
+        sa.Column("provenance", sa.String(length=128), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
+        sa.CheckConstraint(
+            "confidence >= 0 AND confidence <= 1",
+            name="ck_speaker_semantic_identities_confidence",
+        ),
+        sa.ForeignKeyConstraint(["profile_id"], ["speaker_profiles.id"], ondelete="CASCADE"),
+        sa.PrimaryKeyConstraint("id"),
+        sa.UniqueConstraint(
+            "identity_kind", "identity_digest", name="uq_speaker_semantic_identity"
+        ),
+    )
+    op.create_index(
+        "ix_speaker_semantic_identities_identity_digest",
+        "speaker_semantic_identities",
+        ["identity_digest"],
+    )
+    op.create_index(
+        "ix_speaker_semantic_identities_profile_id",
+        "speaker_semantic_identities",
+        ["profile_id"],
+    )
+    op.create_table(
         "utterance_speaker_assignments",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("utterance_id", sa.String(length=36), nullable=False),
@@ -602,12 +783,20 @@ def upgrade() -> None:
             name="ck_speaker_assignments_role",
         ),
         sa.ForeignKeyConstraint(["utterance_id"], ["utterances.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["speaker_profile_id"], ["speaker_profiles.id"], ondelete="SET NULL"
+        ),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
         "ix_utterance_speaker_assignments_speaker_role",
         "utterance_speaker_assignments",
         ["speaker_role"],
+    )
+    op.create_index(
+        "ix_utterance_speaker_assignments_speaker_profile_id",
+        "utterance_speaker_assignments",
+        ["speaker_profile_id"],
     )
     op.create_index(
         "ix_utterance_speaker_assignments_utterance_id",
@@ -721,11 +910,18 @@ def downgrade() -> None:
     for table_name in (
         "agent_messages",
         "utterance_speaker_assignments",
+        "speaker_semantic_identities",
+        "speaker_prototypes",
+        "speaker_profile_aliases",
+        "speaker_profiles",
+        "activity_participants",
+        "activity_source_links",
+        "activities",
         "utterances",
         "source_epochs",
-        "caption_event_counters",
-        "caption_event_diagnostics",
-        "caption_event_tombstones",
+        "evidence_event_counters",
+        "evidence_event_diagnostics",
+        "evidence_event_tombstones",
         "agent_runs",
         "session_source_bindings",
         "recording_segments",

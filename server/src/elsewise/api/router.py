@@ -1,5 +1,6 @@
 import asyncio
 import contextlib
+from dataclasses import asdict
 from typing import Annotated, Any, cast
 
 from fastapi import (
@@ -37,10 +38,15 @@ from elsewise.api.schemas import (
     SessionCreate,
     SessionUpdate,
     SourceSelection,
+    SpeakerAssignmentUpdate,
+    SpeakerProfileCreate,
+    SpeakerProfileRename,
     SpeechProfileResolveRequest,
 )
 from elsewise.api.security import safe_http_request, safe_ui_websocket
 from elsewise.api.serialization import (
+    activity_payload,
+    participant_payload,
     segment_payload,
     source_payload,
     ui_event_payload,
@@ -52,12 +58,14 @@ from elsewise.exports import ExportService
 from elsewise.observability import RuntimeDiagnostics
 from elsewise.persistence.database import Database
 from elsewise.persistence.models import (
+    ActivityParticipantRecord,
+    ActivityRecord,
     AgentMessageRecord,
     AgentRunRecord,
     AgentThreadRecord,
     ButtonDefinitionRecord,
-    CaptionEventCounterRecord,
     CaptureSourceRecord,
+    EvidenceEventCounterRecord,
     MaintenanceStateRecord,
     PairedClientRecord,
     RecordingSegmentRecord,
@@ -78,11 +86,21 @@ from elsewise.services.sessions import SessionService, prepare_agent_cwd, sessio
 from elsewise.settings.config import DEFAULT_INITIAL_PROMPTS, GlobalSettings, SettingsStore
 from elsewise.settings.languages import SUPPORTED_LANGUAGE_SET
 from elsewise.settings.limits import UI_SEND_TIMEOUT_SECONDS
-from elsewise.speakers.service import refresh_caption_speaker_assignments
+from elsewise.speakers.registry import SpeakerProfile, SpeakerRegistry
+from elsewise.speakers.service import assign_speaker_manually, refresh_caption_speaker_assignments
 from elsewise.speech.models import ModelRegistry
 from elsewise.speech.profiles import HardwareCapabilities, SpeechProfile, resolve_profile
 
 router = APIRouter(prefix="/api")
+
+
+def _speaker_profile_payload(profile: SpeakerProfile) -> dict[str, Any]:
+    return {
+        "id": profile.id,
+        "display_name": profile.display_name,
+        "aliases": list(profile.aliases),
+        "prototype_count": profile.prototype_count,
+    }
 
 
 def database_from_request(request: Request) -> Database:
@@ -152,6 +170,44 @@ def speech_models(request: Request) -> dict[str, Any]:
         "manifest_version": registry.manifest.version,
         "items": [item.payload() for item in registry.inventory()],
     }
+
+
+@router.get("/speaker-profiles")
+def list_speaker_profiles(database: DatabaseDependency) -> list[dict[str, Any]]:
+    return [_speaker_profile_payload(item) for item in SpeakerRegistry(database).list()]
+
+
+@router.post("/speaker-profiles", status_code=201)
+def create_speaker_profile(
+    body: SpeakerProfileCreate, database: DatabaseDependency
+) -> dict[str, Any]:
+    try:
+        profile = SpeakerRegistry(database).create(
+            body.display_name, aliases=tuple(body.aliases)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="invalid_speaker_profile") from exc
+    return _speaker_profile_payload(profile)
+
+
+@router.patch("/speaker-profiles/{profile_id}")
+def rename_speaker_profile(
+    profile_id: str, body: SpeakerProfileRename, database: DatabaseDependency
+) -> dict[str, Any]:
+    try:
+        profile = SpeakerRegistry(database).rename(profile_id, body.display_name)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="not_found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="invalid_speaker_profile") from exc
+    return _speaker_profile_payload(profile)
+
+
+@router.delete("/speaker-profiles/{profile_id}", status_code=204)
+def delete_speaker_profile(profile_id: str, database: DatabaseDependency) -> Response:
+    if not SpeakerRegistry(database).delete(profile_id):
+        raise HTTPException(status_code=404, detail="not_found")
+    return Response(status_code=204)
 
 
 @router.post("/speech/profiles/resolve")
@@ -640,19 +696,21 @@ async def safe_diagnostics(request: Request, database: DatabaseDependency) -> di
             ).tuples()
         }
         event_count = db.scalar(select(func.count(UiEventRecord.id))) or 0
-        caption_event_counters = [
+        evidence_event_counters = [
             {
-                "event_type": record.event_type,
+                "capability": record.capability,
+                "event_kind": record.event_kind,
                 "result": record.processing_result,
                 "reason_code": record.reason_code,
                 "protocol_version": record.protocol_version,
                 "count": record.count,
             }
             for record in db.scalars(
-                select(CaptionEventCounterRecord).order_by(
-                    CaptionEventCounterRecord.event_type,
-                    CaptionEventCounterRecord.processing_result,
-                    CaptionEventCounterRecord.reason_code,
+                select(EvidenceEventCounterRecord).order_by(
+                    EvidenceEventCounterRecord.capability,
+                    EvidenceEventCounterRecord.event_kind,
+                    EvidenceEventCounterRecord.processing_result,
+                    EvidenceEventCounterRecord.reason_code,
                 )
             )
         ]
@@ -671,7 +729,11 @@ async def safe_diagnostics(request: Request, database: DatabaseDependency) -> di
         "sources": source_platforms,
         "agent_runs": run_states,
         "ui_event_count": event_count,
-        "caption_event_counters": caption_event_counters,
+        "evidence_event_counters": evidence_event_counters,
+        "evidence_bus": asdict(request.app.state.evidence_bus.snapshot()),
+        "active_speaker_intervals": len(
+            request.app.state.active_speaker_index.intervals()
+        ),
         "runtime": cast(RuntimeDiagnostics, request.app.state.diagnostics).snapshot(),
     }
 
@@ -798,6 +860,71 @@ def list_utterances(
         else None
     )
     return {"items": items, "next_cursor": next_cursor, "has_more": has_more}
+
+
+@router.patch("/utterances/{utterance_id}/speaker")
+def update_utterance_speaker(
+    utterance_id: str,
+    body: SpeakerAssignmentUpdate,
+    database: DatabaseDependency,
+) -> dict[str, Any]:
+    updated_count = assign_speaker_manually(
+        database,
+        utterance_id,
+        profile_id=body.profile_id,
+        display_label=body.display_label,
+        apply_to_anonymous_track=body.apply_to_anonymous_track,
+        use_voice_samples=body.use_voice_samples,
+        clear=body.clear,
+    )
+    with database.transaction() as db:
+        record = db.get(UtteranceRecord, utterance_id)
+        assert record is not None
+        assignment = db.scalar(
+            select(UtteranceSpeakerAssignmentRecord).where(
+                UtteranceSpeakerAssignmentRecord.utterance_id == utterance_id
+            )
+        )
+        assert assignment is not None
+        payload = utterance_payload(record, assignment)
+    return {"utterance": payload, "updated_count": updated_count}
+
+
+@router.get("/sessions/{session_id}/activity-state")
+def session_activity_state(
+    session_id: str, database: DatabaseDependency
+) -> dict[str, Any]:
+    SessionService(database).get(session_id)
+    with database.transaction() as db:
+        activities = list(
+            db.scalars(
+                select(ActivityRecord)
+                .where(ActivityRecord.session_id == session_id)
+                .order_by(ActivityRecord.started_offset_us, ActivityRecord.id)
+            )
+        )
+        participants = list(
+            db.scalars(
+                select(ActivityParticipantRecord)
+                .join(ActivityRecord)
+                .where(ActivityRecord.session_id == session_id)
+                .order_by(
+                    ActivityParticipantRecord.last_observed_offset_us,
+                    ActivityParticipantRecord.id,
+                )
+            )
+        )
+    grouped: dict[str, list[dict[str, Any]]] = {item.id: [] for item in activities}
+    for participant in participants:
+        grouped.setdefault(participant.activity_id, []).append(
+            participant_payload(participant)
+        )
+    return {
+        "activities": [
+            {**activity_payload(activity), "participants": grouped[activity.id]}
+            for activity in activities
+        ]
+    }
 
 
 @router.get("/sessions/{session_id}/agent-history")
@@ -1094,7 +1221,7 @@ async def ui_websocket(websocket: WebSocket) -> None:
                 websocket.send_json(
                     {
                         "type": "ui.event",
-                        "protocol_version": 2,
+                        "protocol_version": 3,
                         "event_id": maximum,
                         "event_type": "resync_required",
                         "aggregate_id": None,

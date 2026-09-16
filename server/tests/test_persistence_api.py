@@ -16,10 +16,10 @@ from elsewise.persistence.models import (
     AgentRunRecord,
     AgentThreadRecord,
     ButtonDefinitionRecord,
-    CaptionEventCounterRecord,
-    CaptionEventDiagnosticRecord,
-    CaptionEventTombstoneRecord,
     CaptureSourceRecord,
+    EvidenceEventCounterRecord,
+    EvidenceEventDiagnosticRecord,
+    EvidenceEventTombstoneRecord,
     PairedClientRecord,
     RecordingSegmentRecord,
     SessionRecord,
@@ -28,7 +28,7 @@ from elsewise.persistence.models import (
     UiEventRecord,
     UtteranceRecord,
 )
-from elsewise.protocol.models import CaptionFinalize, CaptionUpsert, SourceDiscovered
+from elsewise.protocol.models import EvidenceEmit, SourceDiscovered
 from elsewise.services.action_presets import MAX_ACTION_PRESETS, ActionPresetService
 from elsewise.services.builtin_actions import BUILTIN_ACTIONS, BUILTIN_PRESETS
 from elsewise.services.buttons import MAX_ACTIONS, ButtonService
@@ -37,7 +37,7 @@ from elsewise.services.sessions import SessionService, recover_after_restart
 from elsewise.settings.config import DEFAULT_INITIAL_PROMPTS
 from elsewise.settings.languages import SUPPORTED_LANGUAGES
 from elsewise.settings.paths import AppPaths
-from elsewise.sources.projectors.captions import CaptionProjector
+from elsewise.sources.projectors.evidence import EvidenceProjector
 from fastapi.testclient import TestClient
 from sqlalchemy import event as sqlalchemy_event
 from sqlalchemy import func, inspect, select
@@ -106,16 +106,16 @@ def source_status(*, health_status: str = "available") -> SourceDiscovered:
     return SourceDiscovered.model_validate(
         {
             "type": "source.discovered",
-            "protocol_version": 2,
+            "protocol_version": 3,
             "event_id": str(uuid4()),
             "client_seq": 1,
             "tab_instance_id": "tab-runtime-1",
             "producer_epoch_id": "producer-1",
             "platform": "google_meet",
             "activity_key": "opaque-activity-key",
-            "driver_id": "google_meet_captions",
-            "driver_version": "2.0.0",
-            "capabilities": ["captions"],
+            "driver_id": "browser_semantic",
+            "driver_version": "3.0.0",
+            "capabilities": ["captions", "daemon_source_control", "normalized_evidence"],
             "health_status": health_status,
             "observed_at": NOW.isoformat(),
         }
@@ -144,8 +144,8 @@ def bind_source(database: Database, session_id: str) -> tuple[str, str]:
         source = CaptureSourceRecord(
             paired_client_id=client.id,
             platform="google_meet",
-            driver_id="google_meet_captions",
-            driver_version="2.0.0",
+            driver_id="browser_semantic",
+            driver_version="3.0.0",
             tab_instance_id="tab-runtime-1",
             activity_key="opaque-activity-key",
             capabilities=["captions"],
@@ -195,21 +195,29 @@ def caption(
     event_id: str | None = None,
     source_id: str,
     source_epoch_id: str,
-) -> CaptionUpsert | CaptionFinalize:
-    model = CaptionUpsert if message_type == "caption.upsert" else CaptionFinalize
-    return model.model_validate(
+) -> EvidenceEmit:
+    source_time_us = sequence * 1_000
+    return EvidenceEmit.model_validate(
         {
-            "type": message_type,
-            "protocol_version": 2,
+            "type": "evidence.emit",
+            "protocol_version": 3,
             "event_id": event_id or str(uuid4()),
             "source_id": source_id,
             "source_epoch_id": source_epoch_id,
             "client_seq": sequence,
-            "utterance_id": "caption-1",
-            "revision": revision,
-            "speaker": "Иван",
-            "text": text,
-            "session_offset_us": sequence * 1_000,
+            "capability": "captions",
+            "kind": message_type,
+            "interval_start_us": source_time_us,
+            "interval_end_us": source_time_us,
+            "source_time_us": source_time_us,
+            "provenance": "meet.dom",
+            "confidence": 1.0,
+            "payload": {
+                "utterance_id": "caption-1",
+                "revision": revision,
+                "speaker": "Иван",
+                "text": text,
+            },
         }
     )
 
@@ -238,11 +246,11 @@ def test_caption_commit_revision_finalize_and_reopen(tmp_path: Path) -> None:
     session = sessions.create(title="Planning")
     sessions.start(session.id, now=NOW)
     source_id, epoch_id = bind_source(database, session.id)
-    projector = CaptionProjector(database)
+    projector = EvidenceProjector(database)
 
     first_id = str(uuid4())
     first = caption(
-        "caption.upsert",
+        "caption.partial",
         sequence=2,
         revision=1,
         text="Нам",
@@ -255,7 +263,7 @@ def test_caption_commit_revision_finalize_and_reopen(tmp_path: Path) -> None:
     assert (
         projector.process(
             caption(
-                "caption.upsert",
+                "caption.partial",
                 sequence=3,
                 revision=1,
                 text="Нам старое",
@@ -268,7 +276,7 @@ def test_caption_commit_revision_finalize_and_reopen(tmp_path: Path) -> None:
     assert (
         projector.process(
             caption(
-                "caption.upsert",
+                "caption.partial",
                 sequence=4,
                 revision=2,
                 text="Нам нужно",
@@ -281,7 +289,7 @@ def test_caption_commit_revision_finalize_and_reopen(tmp_path: Path) -> None:
     assert (
         projector.process(
             caption(
-                "caption.finalize",
+                "caption.final",
                 sequence=5,
                 revision=2,
                 text="Нам нужно",
@@ -296,11 +304,11 @@ def test_caption_commit_revision_finalize_and_reopen(tmp_path: Path) -> None:
         utterance = db.scalar(select(UtteranceRecord))
         assert utterance is not None
         assert (utterance.text, utterance.revision, utterance.final) == ("Нам нужно", 2, True)
-        assert db.scalar(select(func.count(CaptionEventTombstoneRecord.event_id))) == 4
-        diagnostics = list(db.scalars(select(CaptionEventDiagnosticRecord.processing_result)))
+        assert db.scalar(select(func.count(EvidenceEventTombstoneRecord.event_id))) == 4
+        diagnostics = list(db.scalars(select(EvidenceEventDiagnosticRecord.processing_result)))
         assert diagnostics == ["stale"]
         counters: dict[str, int] = {}
-        for record in db.scalars(select(CaptionEventCounterRecord)):
+        for record in db.scalars(select(EvidenceEventCounterRecord)):
             counters[record.processing_result] = (
                 counters.get(record.processing_result, 0) + record.count
             )
@@ -473,9 +481,9 @@ def test_rest_snapshot_outbox_and_websocket_replay(tmp_path: Path) -> None:
 
         source_id, epoch_id = bind_source(app.state.database, session_id)
         assert (
-            CaptionProjector(app.state.database).process(
+            EvidenceProjector(app.state.database).process(
                 caption(
-                    "caption.upsert",
+                    "caption.partial",
                     sequence=2,
                     revision=1,
                     text="Live text",
@@ -509,12 +517,106 @@ def test_rest_snapshot_outbox_and_websocket_replay(tmp_path: Path) -> None:
         with client.websocket_connect("/ws/ui?since=0", headers=websocket_headers) as websocket:
             first_event = websocket.receive_json()
             assert first_event["event_id"] == 1
-            assert first_event["protocol_version"] == 2
+            assert first_event["protocol_version"] == 3
         assert app.state.diagnostics.snapshot()["ui_clients_connected"] == 0
         with client.websocket_connect(
             "/ws/ui?since=999999", headers=websocket_headers
         ) as websocket:
             assert websocket.receive_json()["event_type"] == "resync_required"
+
+
+@pytest.mark.integration
+def test_phase3_speaker_profile_manual_label_and_activity_state_api(tmp_path: Path) -> None:
+    app = create_app(
+        database_url=f"sqlite:///{tmp_path / 'phase3-api.sqlite3'}",
+        settings_path=tmp_path / "settings.json",
+        agent_provider=FakeAgentProvider(),
+    )
+    with TestClient(app, base_url="http://127.0.0.1:38473") as client:
+        created_profile = client.post(
+            "/api/speaker-profiles",
+            json={"display_name": "Alice", "aliases": ["Al"]},
+        )
+        assert created_profile.status_code == 201
+        profile_id = created_profile.json()["id"]
+        assert client.get("/api/speaker-profiles").json()[0]["aliases"] == ["Al"]
+        renamed = client.patch(
+            f"/api/speaker-profiles/{profile_id}", json={"display_name": "Alice R"}
+        )
+        assert renamed.json()["display_name"] == "Alice R"
+
+        created = client.post("/api/sessions", json={"title": "Phase 3 API"})
+        session_id = created.json()["id"]
+        assert client.post(f"/api/sessions/{session_id}/start").status_code == 200
+        source_id, epoch_id = bind_source(app.state.database, session_id)
+        with app.state.database.transaction() as db:
+            source = db.get(CaptureSourceRecord, source_id)
+            assert source is not None
+            source.capabilities = ["captions", "activity_lifecycle", "participants"]
+        projector = EvidenceProjector(app.state.database)
+        assert (
+            projector.process(
+                caption(
+                    "caption.final",
+                    sequence=2,
+                    revision=1,
+                    text="Hello",
+                    source_id=source_id,
+                    source_epoch_id=epoch_id,
+                )
+            )
+            == "applied"
+        )
+        utterance = client.get(f"/api/sessions/{session_id}/utterances").json()["items"][0]
+        assigned = client.patch(
+            f"/api/utterances/{utterance['id']}/speaker",
+            json={"profile_id": profile_id},
+        )
+        assert assigned.status_code == 200
+        assert assigned.json()["utterance"]["speaker"] == "Alice R"
+        assert assigned.json()["utterance"]["speaker_profile_id"] == profile_id
+        cleared = client.patch(
+            f"/api/utterances/{utterance['id']}/speaker",
+            json={"clear": True},
+        )
+        assert cleared.json()["utterance"]["speaker_role"] == "unknown"
+
+        for sequence, capability, kind, payload in (
+            (3, "activity_lifecycle", "activity.started", {}),
+            (
+                4,
+                "participants",
+                "participant.upsert",
+                {"participant_id": "p-1", "display_label": "Bob"},
+            ),
+        ):
+            assert (
+                projector.process(
+                    EvidenceEmit.model_validate(
+                        {
+                            "type": "evidence.emit",
+                            "protocol_version": 3,
+                            "event_id": str(uuid4()),
+                            "source_id": source_id,
+                            "source_epoch_id": epoch_id,
+                            "client_seq": sequence,
+                            "capability": capability,
+                            "kind": kind,
+                            "interval_start_us": sequence * 1_000,
+                            "interval_end_us": sequence * 1_000,
+                            "source_time_us": sequence * 1_000,
+                            "provenance": "test.fixture",
+                            "confidence": 0.9,
+                            "payload": payload,
+                        }
+                    )
+                )
+                == "applied"
+            )
+        activity_state = client.get(f"/api/sessions/{session_id}/activity-state").json()
+        assert activity_state["activities"][0]["state"] == "running"
+        assert activity_state["activities"][0]["participants"][0]["display_label"] == "Bob"
+        assert client.delete(f"/api/speaker-profiles/{profile_id}").status_code == 204
 
 
 @pytest.mark.integration
@@ -1175,7 +1277,7 @@ def test_long_session_snapshot_is_bounded_and_history_is_cursor_paginated(
                     revision=1,
                     text=f"bounded secret transcript {index}",
                     final=True,
-                    origin_kind="browser_captions",
+                    origin_kind="browser_semantic_caption",
                     origin_confidence=1.0,
                     projection_version=1,
                     first_session_offset_us=index * 1_000_000,

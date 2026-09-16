@@ -5,9 +5,10 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "build": "npm run build:chrome && npm run build:firefox",
+    "build": "npm run build:chrome && npm run build:firefox && npm run build:safari",
     "build:chrome": "vite build --mode chrome && node scripts/verify-build.mjs chrome",
     "build:firefox": "vite build --mode firefox && node scripts/verify-build.mjs firefox",
+    "build:safari": "vite build --mode safari && node scripts/verify-build.mjs safari",
     "coverage": "vitest run --coverage --coverage.reporter=text --coverage.reporter=json-summary --coverage.reporter=html",
     "lint": "eslint .",
     "test": "vitest run",

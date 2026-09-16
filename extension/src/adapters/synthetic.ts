@@ -1,10 +1,11 @@
 import { sanitizeSubtree, sanitizeUrl } from "../content/diagnostics";
+import { captionEvidence, emptySnapshot } from "./base";
 import type {
   AdapterStatus,
-  AdapterUtteranceEvent,
+  AdapterEvidenceEvent,
   DiagnosticBundle,
-  DiscoveryResult,
-  PlatformAdapter,
+  DetectionResult,
+  SemanticAdapter,
 } from "./base";
 
 const extensionVersion = __EXTENSION_VERSION__;
@@ -16,7 +17,7 @@ interface UtteranceState {
   final: boolean;
 }
 
-export class SyntheticAdapter implements PlatformAdapter {
+export class SyntheticAdapter implements SemanticAdapter {
   readonly platform = "synthetic" as const;
   readonly #document: Document;
   #root: Element | null = null;
@@ -24,7 +25,7 @@ export class SyntheticAdapter implements PlatformAdapter {
   #utterances = new Map<string, UtteranceState>();
   #mutations: string[] = [];
   #signals: string[] = [];
-  #onEvent: ((event: AdapterUtteranceEvent) => void) | null = null;
+  #onEvent: ((event: AdapterEvidenceEvent) => void) | null = null;
   #onStatus: ((status: AdapterStatus) => void) | null = null;
 
   constructor(document: Document) {
@@ -37,7 +38,26 @@ export class SyntheticAdapter implements PlatformAdapter {
     );
   }
 
-  discover(document: Document): DiscoveryResult {
+  capabilities() {
+    return new Set(["captions"] as const);
+  }
+
+  snapshot() {
+    const snapshot = emptySnapshot(this.#root !== null);
+    snapshot.participants = [...new Set([...this.#utterances.values()].map((item) => item.speaker))]
+      .filter((name): name is string => name !== null)
+      .map((displayLabel) => ({
+        id: displayLabel,
+        displayLabel,
+        self: false,
+        activeSpeaker: false,
+        muted: null,
+        handRaised: null,
+      }));
+    return snapshot;
+  }
+
+  detect(document: Document): DetectionResult {
     const root = document.querySelector("[data-elsewise-captions]");
     const matchedSignals = root
       ? ["explicit synthetic caption root", "structured utterance children"]
@@ -46,13 +66,13 @@ export class SyntheticAdapter implements PlatformAdapter {
   }
 
   start(
-    onEvent: (event: AdapterUtteranceEvent) => void,
+    onEvent: (event: AdapterEvidenceEvent) => void,
     onStatus: (status: AdapterStatus) => void,
   ): void {
     this.stop();
     this.#onEvent = onEvent;
     this.#onStatus = onStatus;
-    const discovery = this.discover(this.#document);
+    const discovery = this.detect(this.#document);
     this.#root = discovery.root;
     this.#signals = discovery.matchedSignals;
     if (!this.#root) {
@@ -88,14 +108,14 @@ export class SyntheticAdapter implements PlatformAdapter {
       for (const [utteranceId, state] of this.#utterances) {
         if (state.final) continue;
         state.final = true;
-        this.#onEvent?.({
-          type: "finalize",
-          utteranceId,
-          revision: state.revision,
-          speaker: state.speaker,
-          text: state.text,
-          observedAt: new Date().toISOString(),
-        });
+        this.#onEvent?.(
+          captionEvidence(this.platform, "finalize", {
+            utteranceId,
+            revision: state.revision,
+            speaker: state.speaker,
+            text: state.text,
+          }),
+        );
       }
     }
   }
@@ -142,14 +162,14 @@ export class SyntheticAdapter implements PlatformAdapter {
       return;
     const revision = (previous?.revision ?? 0) + 1;
     this.#utterances.set(utteranceId, { revision, speaker, text, final });
-    this.#onEvent?.({
-      type: final ? "finalize" : "upsert",
-      utteranceId,
-      revision,
-      speaker,
-      text,
-      observedAt: new Date().toISOString(),
-    });
+    this.#onEvent?.(
+      captionEvidence(this.platform, final ? "finalize" : "upsert", {
+        utteranceId,
+        revision,
+        speaker,
+        text,
+      }),
+    );
   }
 
   #finalizeRemoved(node: Node): void {
@@ -162,14 +182,14 @@ export class SyntheticAdapter implements PlatformAdapter {
       const state = utteranceId ? this.#utterances.get(utteranceId) : undefined;
       if (!utteranceId || !state || state.final) continue;
       state.final = true;
-      this.#onEvent?.({
-        type: "finalize",
-        utteranceId,
-        revision: state.revision,
-        speaker: state.speaker,
-        text: state.text,
-        observedAt: new Date().toISOString(),
-      });
+      this.#onEvent?.(
+        captionEvidence(this.platform, "finalize", {
+          utteranceId,
+          revision: state.revision,
+          speaker: state.speaker,
+          text: state.text,
+        }),
+      );
     }
   }
 

@@ -1,0 +1,22 @@
+{
+  "type": "evidence.emit",
+  "protocol_version": 3,
+  "event_id": "33333333-3333-4333-8333-333333333333",
+  "source_id": "44444444-4444-4444-8444-444444444444",
+  "source_epoch_id": "55555555-5555-4555-8555-555555555555",
+  "client_seq": 2,
+  "capability": "captions",
+  "kind": "caption.partial",
+  "interval_start_us": 900000,
+  "interval_end_us": 900000,
+  "source_time_us": 900000,
+  "timing_uncertainty_us": 1000,
+  "provenance": "meet.dom",
+  "confidence": 0.95,
+  "payload": {
+    "utterance_id": "caption-1",
+    "revision": 1,
+    "speaker": "Speaker A",
+    "text": "Normalized caption"
+  }
+}

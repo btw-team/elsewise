@@ -1,4 +1,4 @@
-from elsewise.domain.utterance import ApplyResult, CaptionEvent, UtteranceMachine
+from elsewise.domain.utterance import ApplyResult, UtteranceEvent, UtteranceMachine
 
 
 def event(
@@ -9,8 +9,8 @@ def event(
     text: str = "hello",
     final: bool = False,
     epoch: str = "epoch-1",
-) -> CaptionEvent:
-    return CaptionEvent(
+) -> UtteranceEvent:
+    return UtteranceEvent(
         event_id=event_id,
         source_epoch_id=epoch,
         utterance_id="caption-1",

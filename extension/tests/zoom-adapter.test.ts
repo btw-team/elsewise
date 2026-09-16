@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type {
   AdapterStatus,
-  AdapterUtteranceEvent,
+  AdapterEvidenceEvent,
 } from "../src/adapters/base";
 import { ZoomAdapter } from "../src/adapters/zoom";
 
@@ -70,7 +70,7 @@ describe("Zoom Web adapter", () => {
       (status) => offStatuses.push(status),
     );
     expect(offStatuses.at(-1)?.captionsStatus).toBe("off");
-    expect(off.discover(document).root).toBeNull();
+    expect(off.detect(document).root).toBeNull();
     off.stop();
 
     load("captions-on-empty.html");
@@ -89,7 +89,7 @@ describe("Zoom Web adapter", () => {
 
   it("tracks append, correction, and retraction revisions in place", async () => {
     load("one-speaker.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -116,7 +116,7 @@ describe("Zoom Web adapter", () => {
   it("coalesces Zoom's transient overlapping caption layers", async () => {
     vi.useFakeTimers();
     load("one-speaker.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -152,7 +152,7 @@ describe("Zoom Web adapter", () => {
       (_, index) => `слово${String(index + 1).padStart(2, "0")}`,
     );
     text.textContent = words.slice(0, 9).join(" ");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -193,7 +193,7 @@ describe("Zoom Web adapter", () => {
     );
     if (!root) throw new Error("caption root missing");
     root.setAttribute("data-elsewise-speaker", "  Chu   Kimba  ");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const statuses: AdapterStatus[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
@@ -214,7 +214,7 @@ describe("Zoom Web adapter", () => {
 
   it("reconciles a same-avatar root replacement as one rolling utterance", async () => {
     load("one-speaker.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -240,7 +240,7 @@ describe("Zoom Web adapter", () => {
 
   it("keeps simultaneous distinct-avatar roots as separate anonymous utterances", () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const statuses: AdapterStatus[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
@@ -283,7 +283,7 @@ describe("Zoom Web adapter", () => {
     );
     annaText.textContent = annaWords.slice(0, 8).join(" ");
     selfText.textContent = selfWords.slice(0, 4).join(" ");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -326,7 +326,7 @@ describe("Zoom Web adapter", () => {
 
   it("finalizes when Zoom hides a root even though the node remains mounted", async () => {
     load("one-speaker.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -349,7 +349,7 @@ describe("Zoom Web adapter", () => {
 
   it("suppresses off/on historical replay and emits only genuinely new speech", async () => {
     load("two-speakers.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const statuses: AdapterStatus[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
@@ -394,7 +394,7 @@ describe("Zoom Web adapter", () => {
 
   it("survives unrelated Speaker/Gallery layout mutations", async () => {
     load("one-speaker.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),
@@ -429,7 +429,7 @@ describe("Zoom Web adapter", () => {
   it("splits a persistent caption after a five-second pause without replaying its prefix", async () => {
     vi.useFakeTimers();
     load("one-speaker.html");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new ZoomAdapter(document);
     adapter.start(
       (event) => events.push(event),

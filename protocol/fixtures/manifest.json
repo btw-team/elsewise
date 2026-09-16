@@ -71,13 +71,8 @@
       "valid": true
     },
     {
-      "file": "valid/caption.upsert.json",
-      "schema": "caption.upsert",
-      "valid": true
-    },
-    {
-      "file": "valid/caption.finalize.json",
-      "schema": "caption.finalize",
+      "file": "valid/evidence.emit.json",
+      "schema": "evidence.emit",
       "valid": true
     },
     { "file": "valid/event.ack.json", "schema": "event.ack", "valid": true },
@@ -113,8 +108,8 @@
       "valid": false
     },
     {
-      "file": "invalid/caption.empty-text.json",
-      "schema": "caption.upsert",
+      "file": "invalid/evidence.unordered-interval.json",
+      "schema": "evidence.emit",
       "valid": false
     }
   ]

@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { AdapterUtteranceEvent } from "../src/adapters/base";
+import type { AdapterEvidenceEvent } from "../src/adapters/base";
 import { MicrosoftTeamsAdapter } from "../src/adapters/microsoft-teams";
 
 afterEach(() => {
@@ -21,7 +21,7 @@ describe("Microsoft Teams synthetic soak", () => {
       </div>`;
     const list = document.querySelector('[role="list"]');
     if (!list) throw new Error("list missing");
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new MicrosoftTeamsAdapter(document);
     adapter.start(
       (event) => events.push(event),

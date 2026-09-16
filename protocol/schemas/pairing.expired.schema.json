@@ -1,9 +1,9 @@
 {
-  "$id": "https://elsewise.local/protocol/v2/pairing.expired.schema.json",
+  "$id": "https://elsewise.local/protocol/v3/pairing.expired.schema.json",
   "additionalProperties": false,
   "properties": {
     "protocol_version": {
-      "const": 2,
+      "const": 3,
       "title": "Protocol Version",
       "type": "integer"
     },
@@ -18,7 +18,11 @@
       "type": "string"
     }
   },
-  "required": ["protocol_version", "request_id", "type"],
+  "required": [
+    "protocol_version",
+    "request_id",
+    "type"
+  ],
   "title": "PairingExpired",
   "type": "object"
 }

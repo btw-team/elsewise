@@ -11,7 +11,7 @@ class ApplyResult(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class CaptionEvent:
+class UtteranceEvent:
     event_id: str
     source_epoch_id: str
     utterance_id: str
@@ -38,7 +38,7 @@ class UtteranceMachine:
 
     def apply(
         self,
-        event: CaptionEvent,
+        event: UtteranceEvent,
         *,
         bound_epoch_id: str,
         stop_boundary_offset_us: int | None = None,

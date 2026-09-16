@@ -9,3 +9,6 @@ __all__ = [
     "SpeakerAssignment",
     "SpeakerAssignmentMachine",
 ]
+from elsewise.speakers.registry import SpeakerProfile, SpeakerRegistry
+
+__all__ = ["SpeakerProfile", "SpeakerRegistry"]

@@ -49,6 +49,7 @@ import type {
   GlobalSettings,
   Segment,
   SessionSummary,
+  SpeakerProfile,
   Utterance,
 } from "./types";
 
@@ -149,6 +150,8 @@ function Transcript({
   loadingEarlier,
   onLoadEarlier,
   theme,
+  speakerProfiles,
+  onAssignSpeaker,
 }: {
   utterances: Utterance[];
   segments: Segment[];
@@ -159,6 +162,8 @@ function Transcript({
   loadingEarlier: boolean;
   onLoadEarlier: () => Promise<number>;
   theme: UiTheme;
+  speakerProfiles: SpeakerProfile[];
+  onAssignSpeaker: (utteranceId: string, profileId: string | null) => Promise<void>;
 }) {
   const viewport = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -299,6 +304,32 @@ function Transcript({
                   <strong className="speaker-name">
                     {utterance.speaker ?? t("unknownSpeaker")}
                   </strong>
+                  <select
+                    className="speaker-assignment"
+                    aria-label={t("speakerIdentity")}
+                    value={utterance.speaker_profile_id ?? ""}
+                    onChange={(event) => {
+                      if (!event.target.value) return;
+                      void onAssignSpeaker(utterance.id, event.target.value);
+                    }}
+                  >
+                    <option value="">{t("unknownSpeaker")}</option>
+                    {speakerProfiles.map((profile) => (
+                      <option key={profile.id} value={profile.id}>
+                        {profile.display_name}
+                      </option>
+                    ))}
+                  </select>
+                  {utterance.speaker && (
+                    <button
+                      className="speaker-assignment-clear"
+                      type="button"
+                      title={t("delete")}
+                      onClick={() => void onAssignSpeaker(utterance.id, null)}
+                    >
+                      ×
+                    </button>
+                  )}
                   <time>
                     {formatTime(utterance.last_received_at, language)}
                   </time>
@@ -421,6 +452,7 @@ export function App() {
   const [agentProviders, setAgentProviders] = useState<AgentProviderHealth[]>(
     [],
   );
+  const [speakerProfiles, setSpeakerProfiles] = useState<SpeakerProfile[]>([]);
   const [settingsDefaults, setSettingsDefaults] =
     useState<GlobalSettings>(fallbackSettings);
   const [loadingEarlier, setLoadingEarlier] = useState(false);
@@ -484,6 +516,13 @@ export function App() {
           }
         })
         .catch(() => undefined);
+      void api
+        .speakerProfiles()
+        .then(
+          (profiles) =>
+            active && setSpeakerProfiles(Array.isArray(profiles) ? profiles : []),
+        )
+        .catch(() => active && setSpeakerProfiles([]));
     };
     update();
     const interval = window.setInterval(update, 10_000);
@@ -579,6 +618,22 @@ export function App() {
     } catch (caught) {
       setActionError(apiErrorMessage(caught, t));
       return false;
+    }
+  }
+
+  async function assignSpeaker(
+    utteranceId: string,
+    profileId: string | null,
+  ): Promise<void> {
+    setActionError("");
+    try {
+      await api.assignSpeaker(
+        utteranceId,
+        profileId ? { profile_id: profileId } : { clear: true },
+      );
+      await refresh();
+    } catch (caught) {
+      setActionError(apiErrorMessage(caught, t));
     }
   }
 
@@ -889,6 +944,8 @@ export function App() {
           loadingEarlier={loadingEarlier}
           onLoadEarlier={loadEarlier}
           theme={uiTheme}
+          speakerProfiles={speakerProfiles}
+          onAssignSpeaker={assignSpeaker}
         />
       </main>
 

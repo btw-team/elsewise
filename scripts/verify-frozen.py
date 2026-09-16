@@ -128,7 +128,7 @@ def smoke_ingest_protocol(root: Path, port: int, version: str) -> None:
             json.dumps(
                 {
                     "type": "pairing.request",
-                    "protocol_version": 2,
+                    "protocol_version": 3,
                     "nonce": nonce,
                     "installation_id": installation_id,
                     "browser_family": "chrome",
@@ -156,7 +156,7 @@ def smoke_ingest_protocol(root: Path, port: int, version: str) -> None:
             json.dumps(
                 {
                     "type": "client.hello",
-                    "protocol_version": 2,
+                    "protocol_version": 3,
                     "role": "extension",
                     "credential": credential,
                     "installation_id": installation_id,

@@ -1,11 +1,14 @@
 import type {
-  CaptionFinalize,
-  CaptionUpsert,
+  AdapterEvidenceEvent,
+} from "../adapters/base";
+import type {
+  EvidenceEmit,
   SourceCommand,
   SourceCommandAck,
   SourceDiscovered,
   SourceHealth,
 } from "../protocol/models";
+import { PROTOCOL_VERSION } from "../protocol/models";
 import { PersistentEventBuffer } from "./event-buffer";
 import { backgroundApi } from "./browser-api";
 import { FrameElection } from "./frame-election";
@@ -21,6 +24,7 @@ interface SourceRuntime {
   producerEpochId: string;
   platform: SourceDiscovered["platform"];
   activityKey?: string;
+  capabilities: string[];
   health: SourceDiscovered["health_status"];
   speaker: string;
   sourceId?: string;
@@ -98,7 +102,12 @@ async function restoreCoordinator(): Promise<void> {
   const state = stored[COORDINATOR_KEY] as
     { clientSequence?: number; sources?: SourceRuntime[] } | undefined;
   clientSequence = state?.clientSequence ?? 0;
-  for (const source of state?.sources ?? []) sources.set(source.tabId, source);
+  for (const source of state?.sources ?? []) {
+    sources.set(source.tabId, {
+      ...source,
+      capabilities: source.capabilities ?? ["captions"],
+    });
+  }
 }
 
 async function ensureInstallationId(): Promise<string> {
@@ -179,15 +188,19 @@ async function beginPairing(): Promise<void> {
     socket.send(
       JSON.stringify({
         type: "pairing.request",
-        protocol_version: 2,
+        protocol_version: PROTOCOL_VERSION,
         nonce,
         installation_id: installationId,
         browser_family: navigator.userAgent.includes("Firefox")
           ? "firefox"
-          : "chrome",
+          : navigator.userAgent.includes("Safari") && !navigator.userAgent.includes("Chrome")
+            ? "safari"
+            : "chrome",
         display_name: navigator.userAgent.includes("Firefox")
           ? "Firefox extension"
-          : "Chrome extension",
+          : navigator.userAgent.includes("Safari") && !navigator.userAgent.includes("Chrome")
+            ? "Safari extension"
+            : "Chrome extension",
         extension_version: extensionVersion,
       }),
     );
@@ -227,7 +240,7 @@ async function beginPairing(): Promise<void> {
 
 function cancelPairing(): void {
   pairingSocket?.send(
-    JSON.stringify({ type: "pairing.cancel", protocol_version: 2 }),
+    JSON.stringify({ type: "pairing.cancel", protocol_version: PROTOCOL_VERSION }),
   );
   pairingState = "unpaired";
 }
@@ -260,7 +273,7 @@ function sendCommandAck(
 ): void {
   transport?.sendControl({
     type: "source.command_ack",
-    protocol_version: 2,
+    protocol_version: PROTOCOL_VERSION,
     command_id: command.command_id,
     source_id: command.source_id,
     source_epoch_id: command.source_epoch_id,
@@ -276,7 +289,7 @@ async function reportSourceUnavailable(source: SourceRuntime): Promise<void> {
   clientSequence += 1;
   await transport.enqueue({
     type: "source.health",
-    protocol_version: 2,
+    protocol_version: PROTOCOL_VERSION,
     event_id: crypto.randomUUID(),
     client_seq: clientSequence,
     source_id: source.sourceId,
@@ -319,8 +332,8 @@ backgroundApi.runtime.onConnect.addListener((port) => {
       queueAdapterMessage(() => handleDiscovery(tabId, frameId, message));
     } else if (message.type === "adapter.status") {
       queueAdapterMessage(() => handleAdapterStatus(tabId, frameId, message));
-    } else if (message.type === "adapter.utterance") {
-      queueAdapterMessage(() => handleUtterance(tabId, frameId, message));
+    } else if (message.type === "adapter.evidence") {
+      queueAdapterMessage(() => handleEvidence(tabId, frameId, message));
     } else if (message.type === "adapter.command_ack") {
       queueAdapterMessage(() => handleAdapterCommandAck(tabId, message));
     } else if (message.type === "diagnostics.bundle") {
@@ -343,6 +356,11 @@ async function handleDiscovery(
     platform: message.platform as SourceRuntime["platform"],
     activityKey:
       typeof message.activityKey === "string" ? message.activityKey : undefined,
+    capabilities: Array.isArray(message.capabilities)
+      ? message.capabilities.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [],
     health: message.supported === false ? "unavailable" : "waiting",
     speaker: "unknown",
     lastEventAt: new Date().toISOString(),
@@ -358,7 +376,7 @@ async function announceSource(source: SourceRuntime): Promise<void> {
   clientSequence += 1;
   const event: SourceDiscovered = {
     type: "source.discovered",
-    protocol_version: 2,
+    protocol_version: PROTOCOL_VERSION,
     event_id: crypto.randomUUID(),
     client_seq: clientSequence,
     tab_instance_id: source.tabInstanceId,
@@ -367,14 +385,16 @@ async function announceSource(source: SourceRuntime): Promise<void> {
     activity_key: source.activityKey,
     driver_id:
       source.platform === "synthetic"
-        ? "synthetic_captions"
-        : "browser_captions",
+        ? "synthetic_semantic"
+        : "browser_semantic",
     driver_version: extensionVersion,
     capabilities: [
-      "captions",
-      "speaker_labels",
-      "daemon_source_control",
-      "normalized_evidence",
+      ...new Set([
+        ...source.capabilities,
+        "speaker_labels",
+        "daemon_source_control",
+        "normalized_evidence",
+      ]),
     ],
     health_status: source.health,
     observed_at: observedAt,
@@ -413,7 +433,7 @@ async function handleAdapterStatus(
   clientSequence += 1;
   const event: SourceHealth = {
     type: "source.health",
-    protocol_version: 2,
+    protocol_version: PROTOCOL_VERSION,
     event_id: crypto.randomUUID(),
     client_seq: clientSequence,
     source_id: source.sourceId,
@@ -426,7 +446,7 @@ async function handleAdapterStatus(
   await persistCoordinator();
 }
 
-async function handleUtterance(
+async function handleEvidence(
   tabId: number,
   frameId: number,
   message: Record<string, unknown>,
@@ -439,35 +459,28 @@ async function handleUtterance(
     !transport
   )
     return;
-  if (!frameElection.acceptUtterance(tabId, frameId)) return;
+  if (!frameElection.acceptEvidence(tabId, frameId)) return;
+  const adapterEvent = message.event as AdapterEvidenceEvent | undefined;
+  if (!adapterEvent) return;
   clientSequence += 1;
   source.lastEventAt = new Date().toISOString();
-  const sessionStartedAt = Date.parse(
-    String(transportState.session?.started_at ?? ""),
-  );
-  const observedAt = Date.parse(
-    String(message.observedAt ?? source.lastEventAt),
-  );
-  const offset = Number.isFinite(sessionStartedAt)
-    ? Math.max(0, observedAt - sessionStartedAt) * 1000
-    : 0;
-  const common = {
-    protocol_version: 2 as const,
+  const event: EvidenceEmit = {
+    type: "evidence.emit",
+    protocol_version: PROTOCOL_VERSION,
     event_id: crypto.randomUUID(),
     source_id: source.sourceId,
     source_epoch_id: source.sourceEpochId,
     client_seq: clientSequence,
-    utterance_id: String(message.utteranceId),
-    revision: Number(message.revision),
-    speaker: typeof message.speaker === "string" ? message.speaker : null,
-    text: String(message.text),
-    session_offset_us: offset,
-    source_time_us: Math.max(0, Math.round(performance.now() * 1000)),
+    capability: adapterEvent.capability,
+    kind: adapterEvent.kind,
+    interval_start_us: adapterEvent.intervalStartUs,
+    interval_end_us: adapterEvent.intervalEndUs,
+    source_time_us: adapterEvent.sourceTimeUs,
+    timing_uncertainty_us: 1_000,
+    provenance: adapterEvent.provenance,
+    confidence: adapterEvent.confidence,
+    payload: adapterEvent.payload,
   };
-  const event: CaptionUpsert | CaptionFinalize =
-    message.eventType === "finalize"
-      ? { ...common, type: "caption.finalize" }
-      : { ...common, type: "caption.upsert" };
   await transport.enqueue(event);
   await persistCoordinator();
 }
@@ -480,7 +493,7 @@ async function handleAdapterCommandAck(
   if (!source?.sourceId || !source.sourceEpochId) return;
   transport?.sendControl({
     type: "source.command_ack",
-    protocol_version: 2,
+    protocol_version: PROTOCOL_VERSION,
     command_id: String(message.commandId),
     source_id: source.sourceId,
     source_epoch_id: source.sourceEpochId,

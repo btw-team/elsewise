@@ -28,6 +28,7 @@ from elsewise.api.runtime import runtime_websocket
 from elsewise.api.security import safe_http_request
 from elsewise.audio.helper_process import AudioHelperSupervisor, resolve_audio_helper
 from elsewise.audio.runtime import AudioRuntime
+from elsewise.evidence import ActiveSpeakerIndex, EvidenceBus
 from elsewise.observability import RuntimeDiagnostics
 from elsewise.persistence.database import Database
 from elsewise.services.errors import ServiceError
@@ -88,6 +89,9 @@ def create_app(
     session_cleanup_tasks: set[asyncio.Task[None]] = set()
     browser_connections = BrowserConnectionRegistry()
     source_manager = SourceManager(database, browser_connections)
+    evidence_bus = EvidenceBus()
+    active_speaker_index = ActiveSpeakerIndex()
+    evidence_bus.subscribe("active-speaker-index", active_speaker_index.consume)
     transition_executor = TransitionExecutor()
     native_session_runtime = (
         None
@@ -146,6 +150,8 @@ def create_app(
     application.state.session_cleanup_tasks = session_cleanup_tasks
     application.state.browser_connections = browser_connections
     application.state.source_manager = source_manager
+    application.state.evidence_bus = evidence_bus
+    application.state.active_speaker_index = active_speaker_index
     application.state.session_controller = session_controller
     application.state.audio_runtime = audio_runtime
     application.state.native_session_runtime = native_session_runtime

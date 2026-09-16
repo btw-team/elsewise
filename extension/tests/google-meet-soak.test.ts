@@ -3,7 +3,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { GoogleMeetAdapter } from "../src/adapters/google-meet";
-import type { AdapterUtteranceEvent } from "../src/adapters/base";
+import type { AdapterEvidenceEvent } from "../src/adapters/base";
 
 afterEach(() => vi.useRealTimers());
 
@@ -18,7 +18,7 @@ describe("Google Meet accelerated soak", () => {
           <div class="ygicle">Revision 0</div>
         </div></div>
       </div>`;
-    const events: AdapterUtteranceEvent[] = [];
+    const events: AdapterEvidenceEvent[] = [];
     const adapter = new GoogleMeetAdapter(document);
     adapter.start(
       (event) => events.push(event),

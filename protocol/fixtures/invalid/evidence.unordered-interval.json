@@ -1,0 +1,17 @@
+{
+  "type": "evidence.emit",
+  "protocol_version": 3,
+  "event_id": "420c8d55-11eb-4caf-bc92-19f7d4d0ea1e",
+  "source_id": "7ec99b5d-df50-471c-92f4-e5341c3025f7",
+  "source_epoch_id": "ac4b5b3e-7357-4fca-b19a-5d12d5de93ad",
+  "client_seq": 12,
+  "capability": "active_speaker",
+  "kind": "speaker.started",
+  "interval_start_us": 2000,
+  "interval_end_us": 1000,
+  "source_time_us": 2000,
+  "timing_uncertainty_us": 100,
+  "provenance": "synthetic.fixture",
+  "confidence": 0.9,
+  "payload": { "participant_id": "p-1" }
+}
